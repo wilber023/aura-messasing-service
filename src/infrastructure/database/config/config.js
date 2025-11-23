@@ -10,28 +10,29 @@ module.exports = {
     password: process.env.DB_PASSWORD || 'nueva_password',
     database: process.env.DB_NAME || 'aura_messaging',
     host: process.env.DB_HOST || '127.0.0.1',
-    port: process.env.DB_PORT || 3306,
+    port: parseInt(process.env.DB_PORT) || 3306,
     dialect: 'mysql',
     logging: console.log,
-        migrationStorageTableName: 'sequelize_migrations',
+    migrationStorageTableName: 'sequelize_migrations',
     seederStorageTableName: 'sequelize_seeds',
     define: {
       timestamps: true,
       underscored: true,
       freezeTableName: true
     },
-     pool: {
+    pool: {
       max: 10,
       min: 0,
       acquire: 30000,
       idle: 10000
-    },
-    test: {
+    }
+  },
+  test: {
     username: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || 'nueva_password',
     database: process.env.DB_NAME || 'aura_messaging_test',
     host: process.env.DB_HOST || '127.0.0.1',
-    port: process.env.DB_PORT || 3306,
+    port: parseInt(process.env.DB_PORT) || 3306,
     dialect: 'mysql',
     logging: false,
     migrationStorageTableName: 'sequelize_migrations',
@@ -47,7 +48,7 @@ module.exports = {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 3306,
+    port: parseInt(process.env.DB_PORT) || 3306,
     dialect: 'mysql',
     logging: false,
     migrationStorageTableName: 'sequelize_migrations',
@@ -64,5 +65,4 @@ module.exports = {
       idle: 10000
     }
   }
-}
 };
