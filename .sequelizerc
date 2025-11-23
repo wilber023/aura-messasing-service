@@ -1,32 +1,8 @@
-{
-  "development": {
-    "username": "root",
-    "password": null,
-    "database": "database_development",
-    "host": "127.0.0.1",
-    "dialect": "mysql",
-    "migrationsPath": "src/infrastructure/database/migrations",
-    "seedersPath": "src/infrastructure/database/seeders", 
-    "modelsPath": "src/infrastructure/database/models"
-  },
-  "test": {
-    "username": "root",
-    "password": null,
-    "database": "database_test",
-    "host": "127.0.0.1",
-    "dialect": "mysql",
-    "migrationsPath": "src/infrastructure/database/migrations",
-    "seedersPath": "src/infrastructure/database/seeders",
-    "modelsPath": "src/infrastructure/database/models"
-  },
-  "production": {
-    "username": "root", 
-    "password": null,
-    "database": "database_production",
-    "host": "127.0.0.1",
-    "dialect": "mysql",
-    "migrationsPath": "src/infrastructure/database/migrations",
-    "seedersPath": "src/infrastructure/database/seeders",
-    "modelsPath": "src/infrastructure/database/models"
-  }
-}
+const path = require('path');
+
+module.exports = {
+  'config': path.resolve('src/infrastructure/database/config', 'config.js'),
+  'models-path': path.resolve('src/infrastructure/database', 'models'),
+  'seeders-path': path.resolve('src/infrastructure/database', 'seeders'),
+  'migrations-path': path.resolve('src/infrastructure/database', 'migrations')
+};
