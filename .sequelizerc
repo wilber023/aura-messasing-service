@@ -1,0 +1,11 @@
+{
+  "development": {
+    "config": "src/infrastructure/database/config/config.js"
+  },
+  "test": {
+    "config": "src/infrastructure/database/config/config.js"
+  },
+  "production": {
+    "config": "src/infrastructure/database/config/config.js"
+  }
+}
