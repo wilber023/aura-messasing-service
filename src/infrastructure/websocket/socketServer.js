@@ -148,7 +148,7 @@ let wsServerInstance = null;
 
 const initializeWebSocket = (httpServer) => {
   if (!wsServerInstance) {
-    wsServerInstance = new WebSocketServer(httpServer);
+    wsServerInstance = new WebSocketServer(httpServer); 
   }
   return wsServerInstance;
 };
