@@ -1,6 +1,4 @@
-/**
- * Routes: GroupMembers
- */
+
 
 const express = require('express');
 const router = express.Router();
@@ -15,7 +13,6 @@ const createMemberValidation = [
   body('nickname').optional().isLength({ max: 100 })
 ];
 
-// ✅ Validación para sincronización
 const syncAddValidation = [
   param('groupId').isUUID(),
   body('profileId').notEmpty().isUUID(),
@@ -31,7 +28,6 @@ const idValidation = [param('id').isUUID()];
 
 router.use(authMiddleware);
 
-// ✅ AGREGAR ESTAS RUTAS NUEVAS (antes de las otras)
 router.post('/:groupId/sync-add', syncAddValidation, GroupMemberController.syncAddMember);
 router.delete('/:groupId/sync-remove/:profileId', syncRemoveValidation, GroupMemberController.syncRemoveMember);
 
