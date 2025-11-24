@@ -100,7 +100,7 @@ class Message {
       replyToId: data.reply_to_id,
       isEdited: data.is_edited,
       isDeleted: data.is_deleted,
-      metadata: data.metadata ? JSON.parse(data.metadata) : {},
+metadata: data.metadata ? (typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata) : {},
       createdAt: data.created_at,
       updatedAt: data.updated_at
     });
