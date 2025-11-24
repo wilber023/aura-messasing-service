@@ -198,6 +198,114 @@ class GroupMemberController {
       next(error);
     }
   };
+
+  // ✅ AGREGAR ESTOS DOS MÉTODOS NUEVOS
+
+  /**
+   * Agregar miembro directamente (sin permisos estrictos)
+   * POST /api/v1/group-members/:groupId/sync-add
+   * Usado para sincronización desde el sistema de comunidad
+   */
+  syncAddMember = async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
+      const { groupId } = req.params;
+      const { profileId, status = 'active' } = req.body;
+
+      console.log(`📥 [SYNC] Agregando miembro: ${profileId} al grupo: ${groupId}`);
+
+      // Verificar que el grupo existe
+      const group = await this.groupRepository.findById(groupId);
+      if (!group) {
+        throw new AppError('Grupo no encontrado', 404, 'GROUP_NOT_FOUND');
+      }
+
+      // Verificar si ya es miembro
+      const existingMembership = await this.groupMemberRepository.findMembership(groupId, profileId);
+      
+      if (existingMembership && existingMembership.status !== 'left') {
+        console.log(`⚠️ [SYNC] Usuario ${profileId} ya es miembro del grupo ${groupId}`);
+        return res.status(409).json({
+          success: false,
+          message: 'Usuario ya es miembro del grupo',
+          code: 'ALREADY_MEMBER',
+          data: existingMembership.toJSON()
+        });
+      }
+
+      // Si el grupo está lleno, aún así agregarlo (sincronización)
+      // En el sistema de comunidad ya se unió, así que lo reflejamos aquí
+
+      // Crear el miembro
+      const member = await this.groupMemberRepository.create({
+        groupId,
+        profileId,
+        role: MEMBER_ROLES.MEMBER,
+        status: status
+      });
+
+      await this.groupRepository.incrementMemberCount(groupId);
+
+      console.log(`✅ [SYNC] Usuario ${profileId} agregado al grupo ${groupId}`);
+
+      res.status(201).json({
+        success: true,
+        message: 'Usuario agregado al grupo exitosamente',
+        data: member.toJSON()
+      });
+
+    } catch (error) {
+      console.error('❌ [SYNC] Error en syncAddMember:', error);
+      next(error);
+    }
+  };
+
+  /**
+   * Remover miembro directamente (sin permisos estrictos)
+   * DELETE /api/v1/group-members/:groupId/sync-remove/:profileId
+   * Usado para sincronización desde el sistema de comunidad
+   */
+  syncRemoveMember = async (req, res, next) => {
+    try {
+      const { groupId, profileId } = req.params;
+
+      console.log(`📥 [SYNC] Removiendo miembro: ${profileId} del grupo: ${groupId}`);
+
+      // Buscar la membresía
+      const membership = await this.groupMemberRepository.findMembership(groupId, profileId);
+
+      if (!membership) {
+        console.log(`⚠️ [SYNC] Miembro ${profileId} no encontrado en grupo ${groupId}`);
+        return res.status(404).json({
+          success: false,
+          message: 'Miembro no encontrado en el grupo',
+          code: 'MEMBER_NOT_FOUND'
+        });
+      }
+
+      // Marcar como "left"
+      await this.groupMemberRepository.update(membership.id, { 
+        status: MEMBER_STATUS.LEFT 
+      });
+
+      await this.groupRepository.decrementMemberCount(groupId);
+
+      console.log(`✅ [SYNC] Usuario ${profileId} removido del grupo ${groupId}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Usuario removido del grupo exitosamente'
+      });
+
+    } catch (error) {
+      console.error('❌ [SYNC] Error en syncRemoveMember:', error);
+      next(error);
+    }
+  };
 }
 
 module.exports = new GroupMemberController();

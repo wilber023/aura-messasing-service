@@ -15,10 +15,27 @@ const createMemberValidation = [
   body('nickname').optional().isLength({ max: 100 })
 ];
 
+// ✅ Validación para sincronización
+const syncAddValidation = [
+  param('groupId').isUUID(),
+  body('profileId').notEmpty().isUUID(),
+  body('status').optional().isIn(['active', 'muted'])
+];
+
+const syncRemoveValidation = [
+  param('groupId').isUUID(),
+  param('profileId').isUUID()
+];
+
 const idValidation = [param('id').isUUID()];
 
 router.use(authMiddleware);
 
+// ✅ AGREGAR ESTAS RUTAS NUEVAS (antes de las otras)
+router.post('/:groupId/sync-add', syncAddValidation, GroupMemberController.syncAddMember);
+router.delete('/:groupId/sync-remove/:profileId', syncRemoveValidation, GroupMemberController.syncRemoveMember);
+
+// Rutas existentes
 router.get('/', GroupMemberController.getAll);
 router.get('/:id', idValidation, GroupMemberController.getById);
 router.post('/', createMemberValidation, GroupMemberController.create);
