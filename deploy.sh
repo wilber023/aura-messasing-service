@@ -17,7 +17,7 @@ NC='\033[0m'
 # Variables de configuración
 APP_NAME="aura-messaging-service"
 APP_DIR="/var/www/$APP_NAME"
-REPO_URL="https://github.com/wilber023/aura-server-message-webocket.git"
+REPO_URL="https://github.com/wilber023/aura-messasing-service.git"
 BRANCH="main"
 NODE_VERSION="20"
 DOMAIN="api.tudominio.com"
