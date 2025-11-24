@@ -10,16 +10,18 @@ const GroupModel = require('./GroupModel');
 const GroupMemberModel = require('./GroupMemberModel');
 
 // ==========================================
-// ASOCIACIONES CORREGIDAS - Referenciar 'id' no 'profile_id'
+// ASOCIACIONES CORREGIDAS - Con targetKey/sourceKey
 // ==========================================
 
 // User -> Messages (CORREGIDO)
 UserModel.hasMany(MessageModel, {
   foreignKey: 'sender_profile_id',
+  sourceKey: 'profile_id',
   as: 'sentMessages'
 });
 MessageModel.belongsTo(UserModel, {
   foreignKey: 'sender_profile_id',
+  targetKey: 'profile_id',
   as: 'sender'
 });
 
@@ -33,13 +35,15 @@ MessageModel.belongsTo(ConversationModel, {
   as: 'conversation'
 });
 
-// Conversation -> Users (CORREGIDO)
+// Conversation -> Users (CORREGIDO con targetKey)
 ConversationModel.belongsTo(UserModel, {
   foreignKey: 'participant1_profile_id',
+  targetKey: 'profile_id',
   as: 'participant1'
 });
 ConversationModel.belongsTo(UserModel, {
   foreignKey: 'participant2_profile_id',
+  targetKey: 'profile_id',
   as: 'participant2'
 });
 
@@ -72,16 +76,19 @@ GroupMemberModel.belongsTo(GroupModel, {
 // User -> GroupMembers (CORREGIDO)
 UserModel.hasMany(GroupMemberModel, {
   foreignKey: 'profile_id',
+  sourceKey: 'profile_id',
   as: 'memberships'
 });
 GroupMemberModel.belongsTo(UserModel, {
   foreignKey: 'profile_id',
+  targetKey: 'profile_id',
   as: 'user'
 });
 
 // Group -> Creator (CORREGIDO)
 GroupModel.belongsTo(UserModel, {
   foreignKey: 'creator_profile_id',
+  targetKey: 'profile_id',
   as: 'creator'
 });
 
