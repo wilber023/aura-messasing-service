@@ -1,7 +1,3 @@
-/**
- * Controller: GroupMemberController
- */
-
 const { GroupMemberRepository, GroupRepository } = require('../../repositories');
 const { AppError } = require('../middlewares');
 const { validationResult } = require('express-validator');
