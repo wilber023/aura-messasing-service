@@ -199,13 +199,7 @@ class GroupMemberController {
     }
   };
 
-  // ✅ AGREGAR ESTOS DOS MÉTODOS NUEVOS
-
-  /**
-   * Agregar miembro directamente (sin permisos estrictos)
-   * POST /api/v1/group-members/:groupId/sync-add
-   * Usado para sincronización desde el sistema de comunidad
-   */
+ 
   syncAddMember = async (req, res, next) => {
     try {
       const errors = validationResult(req);

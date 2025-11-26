@@ -1,5 +1,3 @@
-
-
 const express = require('express');
 const router = express.Router();
 const { body, param } = require('express-validator');
@@ -25,13 +23,12 @@ const syncRemoveValidation = [
 ];
 
 const idValidation = [param('id').isUUID()];
-
-router.use(authMiddleware);
-
+ 
 router.post('/:groupId/sync-add', syncAddValidation, GroupMemberController.syncAddMember);
 router.delete('/:groupId/sync-remove/:profileId', syncRemoveValidation, GroupMemberController.syncRemoveMember);
+ 
+router.use(authMiddleware);
 
-// Rutas existentes
 router.get('/', GroupMemberController.getAll);
 router.get('/:id', idValidation, GroupMemberController.getById);
 router.post('/', createMemberValidation, GroupMemberController.create);
