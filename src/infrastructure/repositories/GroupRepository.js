@@ -16,6 +16,15 @@ class GroupRepository {
     });
     return group ? this._toEntity(group) : null;
   }
+  async findByExternalId(externalId) {
+    const group = await GroupModel.findOne({
+      where: { external_id: externalId },
+      include: [
+        { model: UserModel, as: 'creator', attributes: ['id', 'profile_id', 'username', 'display_name', 'avatar_url'] }
+      ]
+    });
+    return group ? this._toEntity(group) : null;
+  }
 
   async findByType(groupType, options = {}) {
     const { page = 1, limit = 20 } = options;
