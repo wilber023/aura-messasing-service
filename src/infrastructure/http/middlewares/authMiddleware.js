@@ -8,7 +8,14 @@ const authMiddleware = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 AUTH MIDDLEWARE - Nueva petición');
+    console.log('📍 URL:', req.method, req.originalUrl);
+    console.log('📋 Headers recibidos:', JSON.stringify(req.headers, null, 2));
+    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ NO HAY TOKEN o formato incorrecto');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       return res.status(401).json({
         success: false,
         message: 'Token de autenticación no proporcionado',
@@ -17,7 +24,14 @@ const authMiddleware = (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
+    console.log('🔑 Token recibido (primeros 50 chars):', token.substring(0, 50) + '...');
+    console.log('🔐 JWT_SECRET usado:', process.env.JWT_SECRET);
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    console.log('✅ TOKEN VÁLIDO!');
+    console.log('👤 Usuario decodificado:', JSON.stringify(decoded, null, 2));
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     req.user = {
       id: decoded.id,
@@ -28,6 +42,11 @@ const authMiddleware = (req, res, next) => {
 
     next();
   } catch (error) {
+    console.log('❌ ERROR AL VALIDAR TOKEN');
+    console.log('Error name:', error.name);
+    console.log('Error message:', error.message);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
