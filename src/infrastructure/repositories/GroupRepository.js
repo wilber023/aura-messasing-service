@@ -1,7 +1,4 @@
-/**
- * Infrastructure Repository: GroupRepository
- */
-
+ 
 const { GroupModel, UserModel } = require('../database/models');
 const { Group, GROUP_TYPES } = require('../../domain/entities/Group');
 const { Op } = require('sequelize');

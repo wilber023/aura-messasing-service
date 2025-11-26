@@ -221,7 +221,7 @@ class GroupMemberController {
 
       // Verificar que el grupo existe
       console.log(`🔍 [SYNC] Buscando grupo: ${groupId}`);
-      const group = await this.groupRepository.findById(groupId);
+      const group = await this.groupRepository.findByExternalId(groupId);
       
       if (!group) {
         console.log(`❌ [SYNC] Grupo ${groupId} no encontrado en BD`);
