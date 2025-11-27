@@ -195,130 +195,155 @@ class GroupMemberController {
     }
   };
 
-  // 🔥 MÉTODO CORREGIDO
   syncAddMember = async (req, res, next) => {
-    try {
-      console.log('🔍 [DEBUG] req.params:', req.params);
-      console.log('🔍 [DEBUG] req.body:', req.body);
+  try {
+    console.log('\n🔥🔥🔥 SYNC ADD MEMBER INICIADO 🔥🔥🔥');
+    console.log('📍 req.params:', req.params);
+    console.log('📍 req.body:', req.body);
 
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        console.log('❌ [SYNC] Validation errors:', errors.array());
-        return res.status(400).json({ success: false, errors: errors.array() });
-      }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
 
-      // 🔥 EXTRAER CORRECTAMENTE EL groupId
-      const groupId = req.params.groupId;
-      const { profileId, status = 'active' } = req.body;
+    // 🔥 CORRECCIÓN: groupId es el externalId (ID de la comunidad)
+    const communityId = req.params.groupId; // Este es el UUID de communities
+    const { profileId, status = 'active' } = req.body;
 
-      console.log(`📥 [SYNC] Agregando miembro: ${profileId} al grupo: ${groupId}`);
+    console.log(`📥 Agregando miembro: ${profileId} a comunidad: ${communityId}`);
 
-      // Validar que groupId existe
-      if (!groupId) {
-        console.error('❌ [SYNC] groupId is undefined or null');
-        throw new AppError('groupId es requerido', 400, 'MISSING_GROUP_ID');
-      }
+    if (!communityId) {
+      throw new AppError('communityId es requerido', 400, 'MISSING_COMMUNITY_ID');
+    }
 
-      // Verificar que el grupo existe
-      console.log(`🔍 [SYNC] Buscando grupo: ${groupId}`);
-      const group = await this.groupRepository.findByExternalId(groupId);
-      
-      if (!group) {
-        console.log(`❌ [SYNC] Grupo ${groupId} no encontrado en BD`);
-        throw new AppError('Grupo no encontrado', 404, 'GROUP_NOT_FOUND');
-      }
+    // 🔥 BUSCAR EL GRUPO DE CHAT POR external_id
+    console.log(`🔍 Buscando grupo de chat con external_id: ${communityId}`);
+    const group = await this.groupRepository.findByExternalId(communityId);
+    
+    if (!group) {
+      console.log(`❌ Grupo de chat NO encontrado para comunidad ${communityId}`);
+      throw new AppError('Grupo de chat no encontrado', 404, 'GROUP_NOT_FOUND');
+    }
 
-      console.log(`✅ [SYNC] Grupo encontrado: ${group.name}`);
+    console.log(`✅ Grupo de chat encontrado: ${group.name}`);
+    console.log(`📌 ID interno del grupo: ${group.id}`);
 
-      // Verificar si ya es miembro
-      const existingMembership = await this.groupMemberRepository.findMembership(groupId, profileId);
-      
-      if (existingMembership) {
-        // Si ya existe pero está como 'left', reactivarlo
-        if (existingMembership.status === 'left') {
-          console.log(`🔄 [SYNC] Reactivando miembro ${profileId} en grupo ${groupId}`);
-          const reactivated = await this.groupMemberRepository.update(existingMembership.id, {
-            status: 'active'
-          });
-          
-          return res.status(200).json({
-            success: true,
-            message: 'Usuario reactivado en el grupo',
-            data: reactivated.toJSON()
-          });
-        }
+    // 🔥 USAR EL ID INTERNO DEL GRUPO DE CHAT
+    const chatGroupId = group.id; // Este es el UUID de chat_groups
+
+    // Verificar si ya es miembro
+    const existingMembership = await this.groupMemberRepository.findMembership(
+      chatGroupId, // 🔥 USAR chatGroupId, NO communityId
+      profileId
+    );
+    
+    if (existingMembership) {
+      if (existingMembership.status === 'left') {
+        console.log(`🔄 Reactivando miembro ${profileId}`);
+        const reactivated = await this.groupMemberRepository.update(existingMembership.id, {
+          status: 'active'
+        });
         
-        // Si ya está activo, retornar éxito (idempotencia)
-        console.log(`ℹ️ [SYNC] Usuario ${profileId} ya es miembro activo del grupo ${groupId}`);
+        await this.groupRepository.incrementMemberCount(chatGroupId);
+        
         return res.status(200).json({
           success: true,
-          message: 'Usuario ya es miembro del grupo',
-          data: existingMembership.toJSON()
+          message: 'Usuario reactivado en el grupo',
+          data: reactivated.toJSON()
         });
       }
-
-      // Crear el miembro
-      console.log(`➕ [SYNC] Creando miembro en BD...`);
-      const member = await this.groupMemberRepository.create({
-        groupId,
-        profileId,
-        role: MEMBER_ROLES.MEMBER,
-        status: status
-      });
-
-      await this.groupRepository.incrementMemberCount(groupId);
-
-      console.log(`✅ [SYNC] Usuario ${profileId} agregado al grupo ${groupId}`);
-
-      res.status(201).json({
+      
+      console.log(`ℹ️ Usuario ${profileId} ya es miembro activo`);
+      return res.status(200).json({
         success: true,
-        message: 'Usuario agregado al grupo exitosamente',
-        data: member.toJSON()
+        message: 'Usuario ya es miembro del grupo',
+        data: existingMembership.toJSON()
       });
-
-    } catch (error) {
-      console.error('❌ [SYNC] Error en syncAddMember:', error);
-      next(error);
     }
-  };
 
-  syncRemoveMember = async (req, res, next) => {
-    try {
-      const { groupId, profileId } = req.params;
+    // 🔥 CREAR MIEMBRO CON EL ID INTERNO DEL GRUPO
+    console.log(`➕ Creando miembro en group_members...`);
+    const member = await this.groupMemberRepository.create({
+      groupId: chatGroupId, // 🔥 USAR chatGroupId
+      profileId,
+      role: MEMBER_ROLES.MEMBER,
+      status: status
+    });
 
-      console.log(`📥 [SYNC] Removiendo miembro: ${profileId} del grupo: ${groupId}`);
+    await this.groupRepository.incrementMemberCount(chatGroupId);
 
-      // Buscar la membresía
-      const membership = await this.groupMemberRepository.findMembership(groupId, profileId);
+    console.log(`✅✅✅ Usuario ${profileId} agregado exitosamente al grupo ${chatGroupId}`);
+    console.log('🔥🔥🔥 SYNC ADD MEMBER COMPLETADO 🔥🔥🔥\n');
 
-      if (!membership) {
-        console.log(`⚠️ [SYNC] Miembro ${profileId} no encontrado en grupo ${groupId}`);
-        return res.status(404).json({
-          success: false,
-          message: 'Miembro no encontrado en el grupo',
-          code: 'MEMBER_NOT_FOUND'
-        });
-      }
+    res.status(201).json({
+      success: true,
+      message: 'Usuario agregado al grupo exitosamente',
+      data: member.toJSON()
+    });
 
-      // Marcar como "left"
-      await this.groupMemberRepository.update(membership.id, { 
-        status: MEMBER_STATUS.LEFT 
+  } catch (error) {
+    console.error('❌ Error en syncAddMember:', error);
+    next(error);
+  }
+};
+
+syncRemoveMember = async (req, res, next) => {
+  try {
+    console.log('\n🚪🚪🚪 SYNC REMOVE MEMBER INICIADO 🚪🚪🚪');
+    
+    const communityId = req.params.groupId; // external_id
+    const { profileId } = req.params;
+
+    console.log(`📥 Removiendo miembro: ${profileId} de comunidad: ${communityId}`);
+
+    // 🔥 BUSCAR GRUPO POR external_id
+    const group = await this.groupRepository.findByExternalId(communityId);
+    
+    if (!group) {
+      console.log(`❌ Grupo no encontrado para comunidad ${communityId}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Grupo no encontrado'
       });
-
-      await this.groupRepository.decrementMemberCount(groupId);
-
-      console.log(`✅ [SYNC] Usuario ${profileId} removido del grupo ${groupId}`);
-
-      res.status(200).json({
-        success: true,
-        message: 'Usuario removido del grupo exitosamente'
-      });
-
-    } catch (error) {
-      console.error('❌ [SYNC] Error en syncRemoveMember:', error);
-      next(error);
     }
-  };
+
+    const chatGroupId = group.id; // ID interno
+
+    // Buscar la membresía usando el ID interno
+    const membership = await this.groupMemberRepository.findMembership(
+      chatGroupId, // 🔥 USAR chatGroupId
+      profileId
+    );
+
+    if (!membership) {
+      console.log(`⚠️ Miembro ${profileId} no encontrado en grupo ${chatGroupId}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Miembro no encontrado en el grupo'
+      });
+    }
+
+    await this.groupMemberRepository.update(membership.id, { 
+      status: MEMBER_STATUS.LEFT 
+    });
+
+    await this.groupRepository.decrementMemberCount(chatGroupId);
+
+    console.log(`✅ Usuario ${profileId} removido del grupo ${chatGroupId}`);
+    console.log('🚪🚪🚪 SYNC REMOVE MEMBER COMPLETADO 🚪🚪🚪\n');
+
+    res.status(200).json({
+      success: true,
+      message: 'Usuario removido del grupo exitosamente'
+    });
+
+  } catch (error) {
+    console.error('❌ Error en syncRemoveMember:', error);
+    next(error);
+  }
+}; 
+
 }
 
 module.exports = new GroupMemberController();
