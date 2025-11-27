@@ -1,7 +1,4 @@
-/**
- * Routes: Groups
- */
-
+ 
 const express = require('express');
 const router = express.Router();
 const { body, param } = require('express-validator');
@@ -21,21 +18,19 @@ const createGroupValidation = [
 
 const idValidation = [param('id').isUUID()];
 
-// 🔥🔥🔥 RUTAS SIN AUTENTICACIÓN (para sincronización entre servicios) 🔥🔥🔥
-// ESTAS DEBEN IR PRIMERO, ANTES DE authMiddleware
+// 🔥 RUTA DE SINCRONIZACIÓN SIN AUTENTICACIÓN (debe ir primero)
 router.post('/sync', createGroupValidation, GroupController.syncGroup);
 
-// 🔓 Rutas públicas (sin autenticación o con autenticación opcional)
+// Rutas públicas
 router.get('/', optionalAuth, GroupController.getAll);
 router.get('/discover', optionalAuth, GroupController.discoverCommunities);
 router.get('/activities', optionalAuth, GroupController.getActivities);
 router.get('/:id', optionalAuth, idValidation, GroupController.getById);
 router.get('/:id/members', optionalAuth, idValidation, GroupController.getMembers);
 
-// 🔒 TODAS LAS RUTAS DESPUÉS DE ESTE PUNTO REQUIEREN AUTENTICACIÓN
+// 🔒 Rutas protegidas (requieren autenticación)
 router.use(authMiddleware);
 
-// Rutas protegidas (requieren autenticación)
 router.get('/my/communities', GroupController.getMyCommunities);
 router.get('/my/activities', GroupController.getMyActivities);
 
