@@ -30,7 +30,7 @@ router.get('/:id/members', optionalAuth, idValidation, GroupController.getMember
 
 // Rutas protegidas
 router.use(authMiddleware);
-
+router.post('/sync', createGroupValidation, GroupController.syncGroup);
 router.get('/my/communities', GroupController.getMyCommunities);
 router.get('/my/activities', GroupController.getMyActivities);
 

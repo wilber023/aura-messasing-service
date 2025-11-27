@@ -150,7 +150,7 @@ class GroupRepository {
       external_id: groupData.externalId,
       max_members: groupData.maxMembers,
       is_public: groupData.isPublic !== false,
-      settings: groupData.settings || {},
+      settings: JSON.stringify(groupData.settings || {}),
       location: groupData.location,
       scheduled_at: groupData.scheduledAt
     });

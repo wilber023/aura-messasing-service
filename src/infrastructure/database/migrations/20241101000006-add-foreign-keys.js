@@ -2,7 +2,7 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Foreign key: conversations.participant1_profile_id -> users.profile_id
+    // FK: conversations.participant1_profile_id -> users.profile_id
     await queryInterface.addConstraint('conversations', {
       fields: ['participant1_profile_id'],
       type: 'foreign key',
@@ -15,7 +15,7 @@ module.exports = {
       onDelete: 'CASCADE'
     });
 
-    // Foreign key: conversations.participant2_profile_id -> users.profile_id
+    // FK: conversations.participant2_profile_id -> users.profile_id
     await queryInterface.addConstraint('conversations', {
       fields: ['participant2_profile_id'],
       type: 'foreign key',
@@ -28,7 +28,7 @@ module.exports = {
       onDelete: 'CASCADE'
     });
 
-    // Foreign key: conversations.last_message_id -> messages.id
+    // FK: conversations.last_message_id -> messages.id
     await queryInterface.addConstraint('conversations', {
       fields: ['last_message_id'],
       type: 'foreign key',
@@ -41,11 +41,11 @@ module.exports = {
       onDelete: 'SET NULL'
     });
 
-    // Foreign key: groups.creator_profile_id -> users.profile_id
-    await queryInterface.addConstraint('groups', {
+    // FK: chat_groups.creator_profile_id -> users.profile_id
+    await queryInterface.addConstraint('chat_groups', {
       fields: ['creator_profile_id'],
       type: 'foreign key',
-      name: 'fk_groups_creator_profile',
+      name: 'fk_chat_groups_creator_profile',
       references: {
         table: 'users',
         field: 'profile_id'
@@ -54,7 +54,7 @@ module.exports = {
       onDelete: 'CASCADE'
     });
 
-    // Foreign key: group_members.profile_id -> users.profile_id
+    // FK: group_members.profile_id -> users.profile_id
     await queryInterface.addConstraint('group_members', {
       fields: ['profile_id'],
       type: 'foreign key',
@@ -67,7 +67,7 @@ module.exports = {
       onDelete: 'CASCADE'
     });
 
-    // Foreign key: group_members.last_read_message_id -> messages.id
+    // FK: group_members.last_read_message_id -> messages.id
     await queryInterface.addConstraint('group_members', {
       fields: ['last_read_message_id'],
       type: 'foreign key',
@@ -80,7 +80,7 @@ module.exports = {
       onDelete: 'SET NULL'
     });
 
-    // Foreign key: messages.sender_profile_id -> users.profile_id
+    // FK: messages.sender_profile_id -> users.profile_id
     await queryInterface.addConstraint('messages', {
       fields: ['sender_profile_id'],
       type: 'foreign key',
@@ -93,7 +93,7 @@ module.exports = {
       onDelete: 'CASCADE'
     });
 
-    // Foreign key: messages.reply_to_id -> messages.id (self-reference)
+    // FK: messages.reply_to_id -> messages.id
     await queryInterface.addConstraint('messages', {
       fields: ['reply_to_id'],
       type: 'foreign key',
@@ -108,12 +108,11 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    // Eliminar foreign keys en orden inverso
     await queryInterface.removeConstraint('messages', 'fk_msg_reply_to');
     await queryInterface.removeConstraint('messages', 'fk_msg_sender_profile');
     await queryInterface.removeConstraint('group_members', 'fk_gm_last_read_message');
     await queryInterface.removeConstraint('group_members', 'fk_gm_profile');
-    await queryInterface.removeConstraint('groups', 'fk_groups_creator_profile');
+    await queryInterface.removeConstraint('chat_groups', 'fk_chat_groups_creator_profile');
     await queryInterface.removeConstraint('conversations', 'fk_conv_last_message');
     await queryInterface.removeConstraint('conversations', 'fk_conv_participant2_profile');
     await queryInterface.removeConstraint('conversations', 'fk_conv_participant1_profile');

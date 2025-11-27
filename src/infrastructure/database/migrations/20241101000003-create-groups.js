@@ -2,7 +2,7 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('groups', {
+    await queryInterface.createTable('chat_groups', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -22,23 +22,19 @@ module.exports = {
       },
       group_type: {
         type: Sequelize.ENUM('community', 'activity', 'private'),
-        defaultValue: 'community',
-        comment: 'community=Comunidades, activity=Actividades cerca de ti, private=Grupos privados'
+        defaultValue: 'community'
       },
       creator_profile_id: {
         type: Sequelize.UUID,
-        allowNull: false,
-        comment: 'ID del perfil que creó el grupo'
+        allowNull: false
       },
       external_id: {
         type: Sequelize.UUID,
-        allowNull: true,
-        comment: 'ID de la comunidad/actividad en otro microservicio'
+        allowNull: true
       },
       max_members: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        comment: 'null = sin límite'
+        allowNull: true
       },
       is_public: {
         type: Sequelize.BOOLEAN,
@@ -62,13 +58,11 @@ module.exports = {
       },
       location: {
         type: Sequelize.JSON,
-        allowNull: true,
-        comment: 'Para actividades: { lat, lng, address }'
+        allowNull: true
       },
       scheduled_at: {
         type: Sequelize.DATE,
-        allowNull: true,
-        comment: 'Fecha programada para actividades'
+        allowNull: true
       },
       created_at: {
         type: Sequelize.DATE,
@@ -83,16 +77,16 @@ module.exports = {
     });
 
     // Índices
-    await queryInterface.addIndex('groups', ['group_type'], { name: 'idx_groups_type' });
-    await queryInterface.addIndex('groups', ['creator_profile_id'], { name: 'idx_groups_creator' });
-    await queryInterface.addIndex('groups', ['external_id'], { name: 'idx_groups_external_id' });
-    await queryInterface.addIndex('groups', ['is_public'], { name: 'idx_groups_is_public' });
-    await queryInterface.addIndex('groups', ['status'], { name: 'idx_groups_status' });
-    await queryInterface.addIndex('groups', ['scheduled_at'], { name: 'idx_groups_scheduled_at' });
-    await queryInterface.addIndex('groups', ['member_count'], { name: 'idx_groups_member_count' });
+    await queryInterface.addIndex('chat_groups', ['group_type'], { name: 'idx_chat_groups_type' });
+    await queryInterface.addIndex('chat_groups', ['creator_profile_id'], { name: 'idx_chat_groups_creator' });
+    await queryInterface.addIndex('chat_groups', ['external_id'], { name: 'idx_chat_groups_external_id' });
+    await queryInterface.addIndex('chat_groups', ['is_public'], { name: 'idx_chat_groups_is_public' });
+    await queryInterface.addIndex('chat_groups', ['status'], { name: 'idx_chat_groups_status' });
+    await queryInterface.addIndex('chat_groups', ['scheduled_at'], { name: 'idx_chat_groups_scheduled_at' });
+    await queryInterface.addIndex('chat_groups', ['member_count'], { name: 'idx_chat_groups_member_count' });
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('groups');
+    await queryInterface.dropTable('chat_groups');
   }
 };

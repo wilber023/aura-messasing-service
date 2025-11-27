@@ -1,7 +1,3 @@
-/**
- * JWT Authentication Middleware
- */
-
 const jwt = require('jsonwebtoken');
 
 const authMiddleware = (req, res, next) => {
@@ -11,7 +7,7 @@ const authMiddleware = (req, res, next) => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🔍 AUTH MIDDLEWARE - Nueva petición');
     console.log('📍 URL:', req.method, req.originalUrl);
-    console.log('📋 Headers recibidos:', JSON.stringify(req.headers, null, 2));
+    console.log('📋 Authorization header:', authHeader ? 'PRESENTE' : 'AUSENTE');
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.log('❌ NO HAY TOKEN o formato incorrecto');

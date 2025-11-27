@@ -12,7 +12,7 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'groups',
+          model: 'chat_groups',
           key: 'id'
         },
         onUpdate: 'CASCADE',
