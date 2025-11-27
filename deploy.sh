@@ -284,14 +284,6 @@ else
     exit 1
 fi
 
-# Preguntar si ejecutar seeds
-read -p "¿Deseas cargar datos de prueba (seeds)? [y/N]: " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    npm run db:seed
-    log_info "Seeds ejecutados"
-fi
-
 #############################################
 # 11. CONFIGURAR NGINX
 #############################################
