@@ -1,5 +1,5 @@
 /**
- * Infrastructure Repository: MessageRepository
+ * Repository: MessageRepository
  */
 
 const { MessageModel, UserModel } = require('../database/models');
@@ -17,7 +17,7 @@ class MessageRepository {
     return message ? this._toEntity(message) : null;
   }
 
-  async findByConversationId(conversationId, options = {}) {
+  async findByConversation(conversationId, options = {}) {
     const { page = 1, limit = 50 } = options;
     const offset = (page - 1) * limit;
     
@@ -33,14 +33,17 @@ class MessageRepository {
 
     return {
       data: rows.map(msg => this._toEntity(msg)),
-      total: count,
-      page,
-      limit,
-      totalPages: Math.ceil(count / limit)
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
     };
   }
 
-  async findByGroupId(groupId, options = {}) {
+  // 🔥 MÉTODO PRINCIPAL PARA OBTENER MENSAJES DE GRUPO
+  async findByGroup(groupId, options = {}) {
     const { page = 1, limit = 50 } = options;
     const offset = (page - 1) * limit;
     
@@ -56,11 +59,22 @@ class MessageRepository {
 
     return {
       data: rows.map(msg => this._toEntity(msg)),
-      total: count,
-      page,
-      limit,
-      totalPages: Math.ceil(count / limit)
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
     };
+  }
+
+  // Alias para compatibilidad
+  async findByGroupId(groupId, options = {}) {
+    return this.findByGroup(groupId, options);
+  }
+
+  async findByConversationId(conversationId, options = {}) {
+    return this.findByConversation(conversationId, options);
   }
 
   async findAll(filters = {}) {
@@ -86,10 +100,12 @@ class MessageRepository {
 
     return {
       data: rows.map(msg => this._toEntity(msg)),
-      total: count,
-      page,
-      limit,
-      totalPages: Math.ceil(count / limit)
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
     };
   }
 
@@ -124,7 +140,7 @@ class MessageRepository {
     return this.findById(id);
   }
 
-  async delete(id) {
+  async softDelete(id) {
     const message = await MessageModel.findByPk(id);
     if (!message) return false;
     
@@ -132,6 +148,24 @@ class MessageRepository {
       is_deleted: true,
       content: 'Mensaje eliminado'
     });
+    return true;
+  }
+
+  async delete(id) {
+    return this.softDelete(id);
+  }
+
+  async markConversationAsRead(conversationId, profileId) {
+    await MessageModel.update(
+      { status: 'read' },
+      {
+        where: {
+          conversation_id: conversationId,
+          sender_profile_id: { [Op.ne]: profileId },
+          status: { [Op.ne]: 'read' }
+        }
+      }
+    );
     return true;
   }
 
@@ -146,6 +180,14 @@ class MessageRepository {
       }
     );
     return true;
+  }
+
+  async getLastMessage(groupId) {
+    const message = await MessageModel.findOne({
+      where: { group_id: groupId, is_deleted: false },
+      order: [['created_at', 'DESC']]
+    });
+    return message ? this._toEntity(message) : null;
   }
 
   _toEntity(model) {
