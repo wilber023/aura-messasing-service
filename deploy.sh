@@ -247,7 +247,7 @@ DB_USER=aura_user
 DB_PASSWORD=AuraMessaging2024!
 
 # JWT
-JWT_SECRET=tu_clave_secreta_cambiar_en_produccion
+JWT_SECRET=pezcadofrito.1
 JWT_EXPIRES_IN=24h
 
 # WebSocket
