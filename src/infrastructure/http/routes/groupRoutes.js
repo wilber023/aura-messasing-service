@@ -21,16 +21,21 @@ const createGroupValidation = [
 
 const idValidation = [param('id').isUUID()];
 
-// Rutas públicas
+// 🔥🔥🔥 RUTAS SIN AUTENTICACIÓN (para sincronización entre servicios) 🔥🔥🔥
+// ESTAS DEBEN IR PRIMERO, ANTES DE authMiddleware
+router.post('/sync', createGroupValidation, GroupController.syncGroup);
+
+// 🔓 Rutas públicas (sin autenticación o con autenticación opcional)
 router.get('/', optionalAuth, GroupController.getAll);
 router.get('/discover', optionalAuth, GroupController.discoverCommunities);
 router.get('/activities', optionalAuth, GroupController.getActivities);
 router.get('/:id', optionalAuth, idValidation, GroupController.getById);
 router.get('/:id/members', optionalAuth, idValidation, GroupController.getMembers);
 
-// Rutas protegidas
+// 🔒 TODAS LAS RUTAS DESPUÉS DE ESTE PUNTO REQUIEREN AUTENTICACIÓN
 router.use(authMiddleware);
-router.post('/sync', createGroupValidation, GroupController.syncGroup);
+
+// Rutas protegidas (requieren autenticación)
 router.get('/my/communities', GroupController.getMyCommunities);
 router.get('/my/activities', GroupController.getMyActivities);
 
