@@ -319,79 +319,92 @@ getMembers = async (req, res, next) => {
     }
   };
 
-  // 🔥 MÉTODO PARA SINCRONIZAR GRUPOS DESDE SOCIAL SERVICE
-  syncGroup = async (req, res, next) => {
-    try {
-      console.log('🔍 [SYNC GROUP] req.body:', req.body);
+ syncGroup = async (req, res, next) => {
+  try {
+    console.log('\n🔥🔥🔥 SYNC GROUP ENDPOINT LLAMADO 🔥🔥🔥');
+    console.log('📦 Body recibido:', JSON.stringify(req.body, null, 2));
+    console.log('📋 Headers:', req.headers);
 
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        console.log('❌ [SYNC GROUP] Validation errors:', errors.array());
-        return res.status(400).json({ success: false, errors: errors.array() });
-      }
-
-      const {
-        externalId,
-        name,
-        description,
-        imageUrl,
-        groupType = 'community',
-        maxMembers = 500,
-        isPublic = true,
-        creatorProfileId
-      } = req.body;
-
-      console.log(`📥 [SYNC GROUP] Sincronizando grupo: ${name} (${externalId})`);
-
-      // Verificar si ya existe
-      const existingGroup = await this.groupRepository.findByExternalId(externalId);
-      
-      if (existingGroup) {
-        console.log(`ℹ️ [SYNC GROUP] Grupo ${externalId} ya existe`);
-        return res.status(200).json({
-          success: true,
-          message: 'Grupo ya existe',
-          data: existingGroup.toJSON()
-        });
-      }
-
-      // Crear el grupo
-      console.log(`➕ [SYNC GROUP] Creando grupo en BD...`);
-      const group = await this.groupRepository.create({
-        name,
-        description,
-        imageUrl,
-        groupType,
-        externalId,
-        maxMembers,
-        isPublic,
-        creatorProfileId
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
+      return res.status(400).json({ 
+        success: false, 
+        errors: errors.array() 
       });
-
-      // Agregar al creador como owner
-      if (creatorProfileId) {
-        await this.groupMemberRepository.create({
-          groupId: group.id,
-          profileId: creatorProfileId,
-          role: 'owner',
-          status: 'active'
-        });
-        await this.groupRepository.incrementMemberCount(group.id);
-      }
-
-      console.log(`✅ [SYNC GROUP] Grupo ${externalId} creado exitosamente`);
-
-      res.status(201).json({
-        success: true,
-        message: 'Grupo sincronizado exitosamente',
-        data: group.toJSON()
-      });
-
-    } catch (error) {
-      console.error('❌ [SYNC GROUP] Error en syncGroup:', error);
-      next(error);
     }
-  };
+
+    const {
+      externalId,
+      name,
+      description,
+      imageUrl,
+      groupType = 'community',
+      maxMembers = 500,
+      isPublic = true,
+      creatorProfileId
+    } = req.body;
+
+    console.log(`📥 Sincronizando grupo: ${name} (externalId: ${externalId})`);
+    console.log(`👤 Creador: ${creatorProfileId}`);
+
+    // Verificar si ya existe
+    console.log(`🔍 Buscando grupo existente con externalId: ${externalId}`);
+    const existingGroup = await this.groupRepository.findByExternalId(externalId);
+    
+    if (existingGroup) {
+      console.log(`ℹ️ Grupo ${externalId} ya existe en BD`);
+      console.log(`📌 ID interno: ${existingGroup.id}`);
+      return res.status(200).json({
+        success: true,
+        message: 'Grupo ya existe',
+        data: existingGroup.toJSON()
+      });
+    }
+
+    // Crear el grupo
+    console.log(`➕ Creando nuevo grupo en BD...`);
+    const group = await this.groupRepository.create({
+      name,
+      description,
+      imageUrl,
+      groupType,
+      externalId,
+      maxMembers,
+      isPublic,
+      creatorProfileId
+    });
+
+    console.log(`✅ Grupo creado en BD: ${group.id}`);
+
+    // Agregar al creador como owner
+    if (creatorProfileId) {
+      console.log(`➕ Agregando creador como owner...`);
+      await this.groupMemberRepository.create({
+        groupId: group.id,
+        profileId: creatorProfileId,
+        role: 'owner',
+        status: 'active'
+      });
+      await this.groupRepository.incrementMemberCount(group.id);
+      console.log(`✅ Creador agregado como owner`);
+    }
+
+    console.log(`✅✅✅ SYNC GROUP COMPLETADO EXITOSAMENTE ✅✅✅\n`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Grupo sincronizado exitosamente',
+      data: group.toJSON()
+    });
+
+  } catch (error) {
+    console.error('❌❌❌ ERROR EN SYNC GROUP ❌❌❌');
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    next(error);
+  }
+};
 }
 
 module.exports = new GroupController();
