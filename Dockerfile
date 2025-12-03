@@ -16,7 +16,7 @@ RUN apk add --no-cache \
 COPY package*.json ./
 
 # Instalar solo dependencias de producción
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --production && npm cache clean --force
 
 # ============================================
 # STAGE 2: Production Image
