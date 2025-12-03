@@ -2,7 +2,7 @@
 
 #############################################
 # AURA Messaging Service - Deploy Script
-# Para AWS EC2 (Amazon Linux 2 / Ubuntu)
+# Para desarrollo local y AWS EC2
 # Con Docker + PostgreSQL
 #############################################
 
@@ -18,15 +18,14 @@ NC='\033[0m'
 
 # Variables de configuración
 APP_NAME="aura-messaging-service"
-APP_DIR="/var/www/$APP_NAME"
-REPO_URL="https://github.com/wilber023/aura-messasing-service.git"
-BRANCH="main"
-DOMAIN="api.tudominio.com"
+APP_DIR="$(pwd)"
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}   🚀 AURA Messaging Service - Script de Despliegue Automático${NC}"
 echo -e "${CYAN}   📦 Stack: Docker + PostgreSQL + Node.js${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}📂 Directorio de trabajo: ${APP_DIR}${NC}"
 echo ""
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -105,10 +104,31 @@ else
     sudo systemctl start docker
     sudo systemctl enable docker
 
-    # Agregar usuario actual al grupo docker
-    sudo usermod -aG docker $USER
+    log_info "Docker instalado: $(sudo docker --version)"
+fi
 
-    log_info "Docker instalado: $(docker --version)"
+# Verificar y configurar permisos de Docker
+log_info "Configurando permisos de Docker..."
+
+if ! groups $USER | grep -q '\bdocker\b'; then
+    log_info "Agregando usuario al grupo docker..."
+    sudo usermod -aG docker $USER
+    log_warn "Usuario agregado al grupo docker"
+    log_warn "IMPORTANTE: Necesitas recargar el grupo para que los cambios tomen efecto"
+    log_warn "Ejecuta: newgrp docker"
+    log_warn "O cierra sesión y vuelve a entrar"
+fi
+
+# Verificar si podemos ejecutar Docker sin sudo
+if ! docker ps &> /dev/null; then
+    log_warn "No se puede ejecutar docker sin sudo"
+    log_info "Usando sudo para comandos Docker..."
+    DOCKER_CMD="sudo docker"
+    DOCKER_COMPOSE_CMD="sudo docker-compose"
+else
+    log_info "Docker configurado correctamente para el usuario actual"
+    DOCKER_CMD="docker"
+    DOCKER_COMPOSE_CMD="docker-compose"
 fi
 
 #############################################
@@ -146,145 +166,213 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
         sudo ufw allow 80/tcp
         sudo ufw allow 443/tcp
         sudo ufw allow 3001/tcp
+        sudo ufw allow 3002/tcp
         sudo ufw --force enable
         log_info "UFW configurado"
+    else
+        log_warn "UFW no está disponible"
     fi
 elif [[ "$OS" == "amzn" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "centos" ]]; then
     if command -v firewall-cmd &> /dev/null; then
         sudo firewall-cmd --permanent --add-service=http
         sudo firewall-cmd --permanent --add-service=https
         sudo firewall-cmd --permanent --add-port=3001/tcp
+        sudo firewall-cmd --permanent --add-port=3002/tcp
         sudo firewall-cmd --reload
         log_info "Firewall configurado"
+    else
+        log_warn "Firewall no está disponible"
     fi
 fi
 
 #############################################
-# 6. CLONAR/ACTUALIZAR REPOSITORIO
+# 6. VERIFICAR ARCHIVOS DEL PROYECTO
 #############################################
 
-log_step "6. Configurando aplicación"
+log_step "6. Verificando archivos del proyecto"
 
-sudo mkdir -p $APP_DIR
-sudo chown -R $USER:$USER $APP_DIR
-
-if [ -d "$APP_DIR/.git" ]; then
-    log_info "Actualizando repositorio existente..."
-    cd $APP_DIR
-    git fetch origin
-    git reset --hard origin/$BRANCH
-else
-    log_info "Clonando repositorio..."
-    git clone -b $BRANCH $REPO_URL $APP_DIR
-    cd $APP_DIR
-fi
-
-log_info "Código fuente actualizado"
-
- #############################################
-# 7. CONFIGURAR VARIABLES DE ENTORNO
-#############################################
-
-log_step "7. Configurando variables de entorno"
-
-if [ -f "$APP_DIR/.env" ]; then
-    log_info "Archivo .env existente encontrado - NO se modificará"
-    log_warn "Asegúrate de que tu .env tenga las credenciales correctas"
-else
-    log_warn "No se encontró archivo .env"
-    log_info "Por favor, crea manualmente el archivo .env antes de continuar"
+# Verificar que estamos en el directorio correcto
+if [ ! -f "$APP_DIR/package.json" ]; then
+    log_error "No se encontró package.json en el directorio actual"
+    log_error "Asegúrate de ejecutar este script desde el directorio raíz del proyecto"
     exit 1
 fi
 
+log_info "Archivos del proyecto encontrados correctamente"
+
+# Verificar que existe docker-compose.yml
+if [ ! -f "$APP_DIR/docker-compose.yml" ]; then
+    log_error "No se encontró docker-compose.yml"
+    exit 1
+fi
+
+log_info "docker-compose.yml encontrado"
+
+# Verificar que existe Dockerfile
+if [ ! -f "$APP_DIR/Dockerfile" ]; then
+    log_error "No se encontró Dockerfile"
+    exit 1
+fi
+
+log_info "Dockerfile encontrado"
+
+#############################################
+# 7. VERIFICAR VARIABLES DE ENTORNO
+#############################################
+
+log_step "7. Verificando variables de entorno"
+
+if [ ! -f "$APP_DIR/.env" ]; then
+    log_error "No se encontró archivo .env"
+    log_error "Por favor, crea el archivo .env con las configuraciones necesarias"
+    log_info "Ejemplo de .env:"
+    echo ""
+    echo "NODE_ENV=production"
+    echo "PORT=3001"
+    echo "HOST=0.0.0.0"
+    echo ""
+    echo "DB_HOST=postgres"
+    echo "DB_PORT=5432"
+    echo "DB_NAME=aura_messaging"
+    echo "DB_USER=postgres"
+    echo "DB_PASSWORD=tu_password_seguro"
+    echo "DB_DIALECT=postgres"
+    echo "DB_SSL=false"
+    echo ""
+    echo "JWT_SECRET=tu_jwt_secret"
+    echo "JWT_EXPIRES_IN=24h"
+    echo "JWT_REFRESH_SECRET=tu_jwt_refresh_secret"
+    echo "JWT_REFRESH_EXPIRES_IN=7d"
+    echo ""
+    exit 1
+fi
+
+log_info "Archivo .env encontrado correctamente"
+
 # Mostrar configuración (sin secretos)
 log_info "Configuración actual:"
-grep -E "^(NODE_ENV|PORT|DB_HOST|DB_NAME|DB_USER)=" $APP_DIR/.env || true
+grep -E "^(NODE_ENV|PORT|HOST|DB_HOST|DB_PORT|DB_NAME|DB_USER|DB_DIALECT)=" "$APP_DIR/.env" || true
+
 #############################################
 # 8. DETENER CONTENEDORES ANTERIORES
 #############################################
 
 log_step "8. Deteniendo contenedores anteriores (si existen)"
 
-cd $APP_DIR
-docker-compose down 2>/dev/null || log_warn "No hay contenedores anteriores"
+cd "$APP_DIR"
+$DOCKER_COMPOSE_CMD down 2>/dev/null || log_warn "No hay contenedores anteriores"
 
 #############################################
-# 9. CONSTRUIR Y LEVANTAR CONTENEDORES
+# 9. LIMPIAR IMÁGENES Y VOLÚMENES HUÉRFANOS
 #############################################
 
-log_step "9. Construyendo y levantando contenedores"
+log_step "9. Limpiando recursos Docker"
 
-cd $APP_DIR
+log_info "Eliminando imágenes dangling..."
+$DOCKER_CMD image prune -f 2>/dev/null || true
+
+log_info "Limpieza completada"
+
+#############################################
+# 10. CONSTRUIR Y LEVANTAR CONTENEDORES
+#############################################
+
+log_step "10. Construyendo y levantando contenedores"
+
+cd "$APP_DIR"
 
 log_info "Construyendo imágenes Docker..."
-docker-compose build --no-cache
+$DOCKER_COMPOSE_CMD build --no-cache
 
 log_info "Levantando servicios..."
-docker-compose up -d
+$DOCKER_COMPOSE_CMD up -d
 
 log_info "Esperando a que PostgreSQL esté listo..."
-sleep 10
+sleep 15
 
 #############################################
-# 10. VERIFICAR ESTADO DE CONTENEDORES
+# 11. VERIFICAR ESTADO DE CONTENEDORES
 #############################################
 
-log_step "10. Verificando estado de contenedores"
+log_step "11. Verificando estado de contenedores"
 
-docker-compose ps
+$DOCKER_COMPOSE_CMD ps
 
 #############################################
-# 11. EJECUTAR MIGRACIONES
+# 12. EJECUTAR MIGRACIONES
 #############################################
 
-log_step "11. Ejecutando migraciones de base de datos"
+log_step "12. Ejecutando migraciones de base de datos"
 
 log_info "Esperando a que la aplicación esté lista..."
-sleep 5
+sleep 10
 
 log_info "Ejecutando migraciones..."
-docker-compose exec -T app npm run db:migrate || {
+$DOCKER_COMPOSE_CMD exec -T app npm run db:migrate || {
     log_error "Error al ejecutar migraciones"
-    log_warn "Intentando nuevamente en 10 segundos..."
-    sleep 10
-    docker-compose exec -T app npm run db:migrate
+    log_warn "Intentando nuevamente en 15 segundos..."
+    sleep 15
+    $DOCKER_COMPOSE_CMD exec -T app npm run db:migrate
 }
 
 log_info "Migraciones ejecutadas correctamente"
 
 #############################################
-# 12. CONFIGURAR RESTART POLICIES
+# 13. CONFIGURAR RESTART POLICIES
 #############################################
 
-log_step "12. Configurando políticas de reinicio"
+log_step "13. Configurando políticas de reinicio"
 
-docker update --restart=unless-stopped aura-postgres aura-messaging-service
+# Obtener nombres reales de los contenedores
+POSTGRES_CONTAINER=$($DOCKER_COMPOSE_CMD ps -q postgres 2>/dev/null)
+APP_CONTAINER=$($DOCKER_COMPOSE_CMD ps -q app 2>/dev/null)
 
-log_info "Políticas de reinicio configuradas"
-
-#############################################
-# 13. VERIFICACIÓN FINAL
-#############################################
-
-log_step "13. Verificación final"
-
-echo ""
-log_info "Probando conexión a PostgreSQL..."
-docker-compose exec -T postgres pg_isready -U postgres && log_info "✅ PostgreSQL: OK" || log_error "❌ PostgreSQL: FALLO"
-
-echo ""
-log_info "Probando API..."
-sleep 3
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/v1/health || echo "000")
-
-if [ "$HTTP_CODE" == "200" ]; then
-    log_info "✅ API: OK (HTTP $HTTP_CODE)"
+if [ -n "$POSTGRES_CONTAINER" ] && [ -n "$APP_CONTAINER" ]; then
+    $DOCKER_CMD update --restart=unless-stopped $POSTGRES_CONTAINER $APP_CONTAINER
+    log_info "Políticas de reinicio configuradas"
 else
-    log_warn "⚠️  API: HTTP $HTTP_CODE (puede estar iniciando...)"
+    log_warn "No se pudieron configurar las políticas de reinicio"
 fi
 
 #############################################
-# 14. RESUMEN FINAL
+# 14. VERIFICACIÓN FINAL
+#############################################
+
+log_step "14. Verificación final"
+
+echo ""
+log_info "Probando conexión a PostgreSQL..."
+$DOCKER_COMPOSE_CMD exec -T postgres pg_isready -U postgres && log_info "✅ PostgreSQL: OK" || log_error "❌ PostgreSQL: FALLO"
+
+echo ""
+log_info "Probando API..."
+sleep 5
+
+# Intentar varias veces el health check
+MAX_RETRIES=5
+RETRY_COUNT=0
+HTTP_CODE="000"
+
+while [ "$HTTP_CODE" != "200" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/v1/health 2>/dev/null || echo "000")
+
+    if [ "$HTTP_CODE" == "200" ]; then
+        log_info "✅ API: OK (HTTP $HTTP_CODE)"
+        break
+    else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            log_warn "⚠️  API: HTTP $HTTP_CODE - Reintentando ($RETRY_COUNT/$MAX_RETRIES)..."
+            sleep 5
+        else
+            log_warn "⚠️  API: HTTP $HTTP_CODE (puede estar iniciando...)"
+            log_info "Verifica los logs con: docker-compose logs -f app"
+        fi
+    fi
+done
+
+#############################################
+# 15. RESUMEN FINAL
 #############################################
 
 echo ""
@@ -299,7 +387,14 @@ echo -e "  • Puerto WebSocket: 3002"
 echo -e "  • Base de datos: PostgreSQL 16"
 echo ""
 
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || hostname -I | awk '{print $1}')
+# Detectar IP pública (EC2) o local
+PUBLIC_IP=$(curl -s --connect-timeout 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
+if [ -z "$PUBLIC_IP" ]; then
+    PUBLIC_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+fi
+if [ -z "$PUBLIC_IP" ]; then
+    PUBLIC_IP="localhost"
+fi
 
 echo -e "${CYAN}🌐 URLs de acceso:${NC}"
 echo -e "  • API: ${GREEN}http://${PUBLIC_IP}:3001/api/v1${NC}"
@@ -325,5 +420,11 @@ echo ""
 echo -e "${CYAN}📊 Monitoreo:${NC}"
 echo -e "  • Ver logs en tiempo real: ${YELLOW}cd $APP_DIR && docker-compose logs -f${NC}"
 echo ""
-echo -e "${GREEN}🚀 AURA Messaging Service está listo y funcionando!${NC}"
+
+if [ "$HTTP_CODE" == "200" ]; then
+    echo -e "${GREEN}🚀 AURA Messaging Service está listo y funcionando!${NC}"
+else
+    echo -e "${YELLOW}⚠️  El servicio está arrancando. Verifica los logs si demora más de 2 minutos.${NC}"
+fi
+
 echo ""
