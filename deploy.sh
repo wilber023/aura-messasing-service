@@ -388,12 +388,27 @@ echo -e "  • Base de datos: PostgreSQL 16"
 echo ""
 
 # Detectar IP pública (EC2) o local
-PUBLIC_IP=$(curl -s --connect-timeout 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
-if [ -z "$PUBLIC_IP" ]; then
+PUBLIC_IP=$(curl -s --connect-timeout 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
+
+# Si no se obtuvo desde metadata de AWS, intentar con servicio externo
+if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" == "" ]; then
+    PUBLIC_IP=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null)
+fi
+
+# Si aún no hay IP pública, usar hostname
+if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" == "" ]; then
     PUBLIC_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 fi
-if [ -z "$PUBLIC_IP" ]; then
+
+# Fallback final
+if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" == "" ]; then
     PUBLIC_IP="localhost"
+fi
+
+# Detectar si es IP privada de AWS (172.x o 10.x)
+if [[ "$PUBLIC_IP" =~ ^172\. ]] || [[ "$PUBLIC_IP" =~ ^10\. ]]; then
+    log_warn "Se detectó IP privada ($PUBLIC_IP). Obteniendo IP pública..."
+    PUBLIC_IP=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null || echo "localhost")
 fi
 
 echo -e "${CYAN}🌐 URLs de acceso:${NC}"
