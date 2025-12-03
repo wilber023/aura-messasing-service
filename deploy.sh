@@ -181,41 +181,24 @@ fi
 
 log_info "Código fuente actualizado"
 
-#############################################
+ #############################################
 # 7. CONFIGURAR VARIABLES DE ENTORNO
 #############################################
 
 log_step "7. Configurando variables de entorno"
 
 if [ -f "$APP_DIR/.env" ]; then
-    log_warn "Archivo .env existente encontrado - NO se modificará"
-    log_warn "Si necesitas actualizar las variables, edita manualmente el archivo"
+    log_info "Archivo .env existente encontrado - NO se modificará"
+    log_warn "Asegúrate de que tu .env tenga las credenciales correctas"
 else
-    log_info "Creando archivo .env desde .env.example..."
-
-    if [ -f "$APP_DIR/.env.example" ]; then
-        cp $APP_DIR/.env.example $APP_DIR/.env
-
-        # Generar secretos aleatorios para JWT
-        JWT_SECRET=$(openssl rand -base64 32)
-        JWT_REFRESH_SECRET=$(openssl rand -base64 32)
-
-        # Actualizar valores en .env
-        sed -i "s|JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|g" $APP_DIR/.env
-        sed -i "s|JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET|g" $APP_DIR/.env
-        sed -i "s|NODE_ENV=.*|NODE_ENV=production|g" $APP_DIR/.env
-
-        log_info "Archivo .env creado con secretos generados automáticamente"
-    else
-        log_error ".env.example no encontrado"
-        exit 1
-    fi
+    log_warn "No se encontró archivo .env"
+    log_info "Por favor, crea manualmente el archivo .env antes de continuar"
+    exit 1
 fi
 
 # Mostrar configuración (sin secretos)
 log_info "Configuración actual:"
 grep -E "^(NODE_ENV|PORT|DB_HOST|DB_NAME|DB_USER)=" $APP_DIR/.env || true
-
 #############################################
 # 8. DETENER CONTENEDORES ANTERIORES
 #############################################
