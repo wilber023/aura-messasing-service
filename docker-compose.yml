@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # PostgreSQL Database Service
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: aura-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-AuraMessaging2024!}
+      POSTGRES_DB: ${DB_NAME:-aura_messaging}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: America/New_York
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - aura-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-aura_messaging}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # AURA Messaging Service (Node.js)
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aura-messaging-service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3001}
+      HOST: ${HOST:-0.0.0.0}
+
+      # Database - PostgreSQL
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-aura_messaging}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-AuraMessaging2024!}
+      DB_DIALECT: postgres
+      DB_SSL: ${DB_SSL:-false}
+
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-pezcadofrito.1}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-pezcadofrito.1.refresh}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+
+      # External Services
+      PROFILE_SERVICE_URL: ${PROFILE_SERVICE_URL:-http://localhost:3000/api/v1/profiles}
+      PROFILE_SERVICE_TIMEOUT: ${PROFILE_SERVICE_TIMEOUT:-5000}
+
+      # WebSocket
+      WS_PORT: ${WS_PORT:-3002}
+      WS_CORS_ORIGIN: ${WS_CORS_ORIGIN:-*}
+
+      # Redis (opcional - si se usa en el futuro)
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+      # Logs
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FILE: ${LOG_FILE:-enabled}
+
+      # Rate Limiting
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+
+    ports:
+      - "${PORT:-3001}:3001"
+      - "${WS_PORT:-3002}:3002"
+
+    networks:
+      - aura-network
+
+    volumes:
+      - ./logs:/app/logs
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/v1/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # Redis (Opcional - para caché y sesiones)
+  # ============================================
+  # Descomenta si necesitas Redis en el futuro
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: aura-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${REDIS_PORT:-6379}:6379"
+  #   networks:
+  #     - aura-network
+  #   volumes:
+  #     - redis_data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  aura-network:
+    driver: bridge
+    name: aura-network
+
+# ============================================
+# Volumes (Persistencia de datos)
+# ============================================
+volumes:
+  postgres_data:
+    name: aura_postgres_data
+    driver: local
+  # redis_data:
+  #   name: aura_redis_data
+  #   driver: local

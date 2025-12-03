@@ -1,0 +1,62 @@
+# ============================================
+# .dockerignore - AURA Messaging Service
+# ============================================
+
+# Node modules (se instalarán en el contenedor)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Archivos de entorno
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Logs
+logs/
+*.log
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentación
+README.md
+CHANGELOG.md
+*.md
+
+# Scripts de desarrollo
+deploy.sh
+*.sh
+
+# Archivos temporales
+tmp/
+temp/
+.cache/
+
+# Build artifacts
+dist/
+build/

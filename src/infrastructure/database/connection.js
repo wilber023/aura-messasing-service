@@ -24,7 +24,7 @@ const sequelize = new Sequelize(
 const testConnection = async () => {
   try {
     await sequelize.authenticate();
-    console.log('✅ Conexión a MySQL establecida correctamente.');
+    console.log('✅ Conexión a PostgreSQL establecida correctamente.');
     return true;
   } catch (error) {
     console.error('❌ Error al conectar con la base de datos:', error.message);

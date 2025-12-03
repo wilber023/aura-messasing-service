@@ -20,7 +20,7 @@ const startServer = async () => {
   console.log('─'.repeat(50));
 
   // Probar conexión a base de datos
-  console.log('📦 Conectando a base de datos MySQL...');
+  console.log('📦 Conectando a base de datos PostgreSQL...');
   const dbConnected = await testConnection();
   
   if (!dbConnected) {

@@ -2,7 +2,8 @@
 
 #############################################
 # AURA Messaging Service - Deploy Script
-# Para AWS EC2 (Ubuntu 22.04/24.04)
+# Para AWS EC2 (Amazon Linux 2 / Ubuntu)
+# Con Docker + PostgreSQL
 #############################################
 
 set -e
@@ -12,6 +13,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Variables de configuración
@@ -19,11 +21,11 @@ APP_NAME="aura-messaging-service"
 APP_DIR="/var/www/$APP_NAME"
 REPO_URL="https://github.com/wilber023/aura-messasing-service.git"
 BRANCH="main"
-NODE_VERSION="20"
 DOMAIN="api.tudominio.com"
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}   AURA Messaging Service - Script de Despliegue AWS EC2${NC}"
+echo -e "${CYAN}   🚀 AURA Messaging Service - Script de Despliegue Automático${NC}"
+echo -e "${CYAN}   📦 Stack: Docker + PostgreSQL + Node.js${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -33,168 +35,135 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step() {
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}▶ $1${NC}"
+    echo -e "${CYAN}▶ $1${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
 #############################################
-# 1. ACTUALIZAR SISTEMA
+# 1. DETECTAR SISTEMA OPERATIVO
 #############################################
 
-log_step "1. Actualizando sistema operativo"
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl wget git build-essential software-properties-common
+log_step "1. Detectando sistema operativo"
+
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+    OS_VERSION=$VERSION_ID
+    log_info "Sistema detectado: $OS $OS_VERSION"
+else
+    log_error "No se pudo detectar el sistema operativo"
+    exit 1
+fi
+
+#############################################
+# 2. ACTUALIZAR SISTEMA
+#############################################
+
+log_step "2. Actualizando sistema operativo"
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    sudo apt-get update -y
+    sudo apt-get upgrade -y
+    sudo apt-get install -y curl wget git build-essential
+elif [[ "$OS" == "amzn" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "centos" ]]; then
+    sudo yum update -y
+    sudo yum install -y curl wget git gcc gcc-c++ make
+fi
+
 log_info "Sistema actualizado correctamente"
 
 #############################################
-# 2. INSTALAR NODE.JS
+# 3. INSTALAR DOCKER
 #############################################
 
-log_step "2. Instalando Node.js v$NODE_VERSION"
+log_step "3. Instalando Docker"
 
-if command -v node &> /dev/null; then
-    CURRENT_NODE=$(node -v)
-    log_warn "Node.js ya está instalado: $CURRENT_NODE"
+if command -v docker &> /dev/null; then
+    DOCKER_VERSION=$(docker --version)
+    log_warn "Docker ya está instalado: $DOCKER_VERSION"
 else
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -
-    sudo apt install -y nodejs
-    log_info "Node.js instalado: $(node -v)"
-fi
+    log_info "Instalando Docker..."
 
-if ! command -v pm2 &> /dev/null; then
-    sudo npm install -g pm2
-    log_info "PM2 instalado correctamente"
-else
-    log_warn "PM2 ya está instalado"
-fi
+    if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+        # Ubuntu/Debian
+        sudo apt-get install -y ca-certificates gnupg lsb-release
+        sudo mkdir -p /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt-get update -y
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    elif [[ "$OS" == "amzn" ]]; then
+        # Amazon Linux 2
+        sudo amazon-linux-extras install docker -y
+    elif [[ "$OS" == "rhel" ]] || [[ "$OS" == "centos" ]]; then
+        # RHEL/CentOS
+        sudo yum install -y yum-utils
+        sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        sudo yum install -y docker-ce docker-ce-cli containerd.io
+    fi
 
-#############################################
-# 3. INSTALAR MYSQL
-#############################################
+    sudo systemctl start docker
+    sudo systemctl enable docker
 
-log_step "3. Instalando MySQL Server"
+    # Agregar usuario actual al grupo docker
+    sudo usermod -aG docker $USER
 
-if command -v mysql &> /dev/null; then
-    log_warn "MySQL ya está instalado"
-else
-    sudo apt install -y mysql-server mysql-client
-    sudo systemctl start mysql
-    sudo systemctl enable mysql
-    log_info "MySQL instalado correctamente"
-fi
-
-#############################################
-# 4. CONFIGURAR MYSQL
-#############################################
-
-log_step "4. Configurando MySQL"
-
-# Crear directorio socket si no existe
-sudo mkdir -p /var/run/mysqld
-sudo chown mysql:mysql /var/run/mysqld
-
-# Intentar configurar MySQL
-log_info "Configurando acceso a MySQL..."
-
-# Verificar si podemos acceder con sudo
-if sudo mysql -e "SELECT 1;" 2>/dev/null; then
-    log_info "Acceso a MySQL con sudo disponible"
-    
-    # Configurar contraseña root y crear usuario
-    sudo mysql << 'SQLEOF'
--- Configurar root
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'AuraRoot2024!';
-
--- Crear base de datos
-CREATE DATABASE IF NOT EXISTS aura_messaging CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- Crear usuario de aplicación
-CREATE USER IF NOT EXISTS 'aura_user'@'localhost' IDENTIFIED BY 'AuraMessaging2024!';
-GRANT ALL PRIVILEGES ON aura_messaging.* TO 'aura_user'@'localhost';
-
-FLUSH PRIVILEGES;
-SQLEOF
-    
-    log_info "MySQL configurado con usuario 'aura_user'"
-else
-    log_warn "No se pudo acceder a MySQL con sudo. Intentando reset de contraseña..."
-    
-    # Detener MySQL
-    sudo systemctl stop mysql
-    
-    # Crear directorio socket
-    sudo mkdir -p /var/run/mysqld
-    sudo chown mysql:mysql /var/run/mysqld
-    
-    # Iniciar en modo seguro
-    sudo mysqld_safe --skip-grant-tables --skip-networking &
-    sleep 5
-    
-    # Configurar
-    mysql -u root << 'SQLEOF'
-FLUSH PRIVILEGES;
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'AuraRoot2024!';
-FLUSH PRIVILEGES;
-SQLEOF
-    
-    # Detener modo seguro
-    sudo killall mysqld
-    sleep 3
-    
-    # Reiniciar normal
-    sudo systemctl start mysql
-    sleep 3
-    
-    # Crear base de datos y usuario
-    mysql -u root -p"AuraRoot2024!" << 'SQLEOF'
-CREATE DATABASE IF NOT EXISTS aura_messaging CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'aura_user'@'localhost' IDENTIFIED BY 'AuraMessaging2024!';
-GRANT ALL PRIVILEGES ON aura_messaging.* TO 'aura_user'@'localhost';
-FLUSH PRIVILEGES;
-SQLEOF
-    
-    log_info "MySQL reseteado y configurado"
-fi
-
-# Verificar conexión
-if mysql -u aura_user -p"AuraMessaging2024!" -e "SELECT 1;" 2>/dev/null; then
-    log_info "✅ Conexión a MySQL verificada correctamente"
-else
-    log_error "❌ No se pudo verificar la conexión a MySQL"
-    log_warn "Deberás configurar MySQL manualmente"
+    log_info "Docker instalado: $(docker --version)"
 fi
 
 #############################################
-# 5. INSTALAR NGINX
+# 4. INSTALAR DOCKER COMPOSE
 #############################################
 
-log_step "5. Instalando Nginx"
+log_step "4. Instalando Docker Compose"
 
-if command -v nginx &> /dev/null; then
-    log_warn "Nginx ya está instalado"
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_VERSION=$(docker-compose --version)
+    log_warn "Docker Compose ya está instalado: $COMPOSE_VERSION"
 else
-    sudo apt install -y nginx
-    sudo systemctl start nginx
-    sudo systemctl enable nginx
-    log_info "Nginx instalado correctamente"
+    log_info "Instalando Docker Compose..."
+
+    # Instalar Docker Compose v2
+    COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    sudo curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+
+    # Crear symlink si no existe
+    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+    log_info "Docker Compose instalado: $(docker-compose --version)"
 fi
 
 #############################################
-# 6. CONFIGURAR FIREWALL
+# 5. CONFIGURAR FIREWALL
 #############################################
 
-log_step "6. Configurando Firewall (UFW)"
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw allow 3001/tcp
-sudo ufw --force enable
-log_info "Firewall configurado"
+log_step "5. Configurando Firewall"
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    if command -v ufw &> /dev/null; then
+        sudo ufw allow OpenSSH
+        sudo ufw allow 80/tcp
+        sudo ufw allow 443/tcp
+        sudo ufw allow 3001/tcp
+        sudo ufw --force enable
+        log_info "UFW configurado"
+    fi
+elif [[ "$OS" == "amzn" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "centos" ]]; then
+    if command -v firewall-cmd &> /dev/null; then
+        sudo firewall-cmd --permanent --add-service=http
+        sudo firewall-cmd --permanent --add-service=https
+        sudo firewall-cmd --permanent --add-port=3001/tcp
+        sudo firewall-cmd --reload
+        log_info "Firewall configurado"
+    fi
+fi
 
 #############################################
-# 7. CLONAR/ACTUALIZAR REPOSITORIO
+# 6. CLONAR/ACTUALIZAR REPOSITORIO
 #############################################
 
-log_step "7. Configurando aplicación"
+log_step "6. Configurando aplicación"
 
 sudo mkdir -p $APP_DIR
 sudo chown -R $USER:$USER $APP_DIR
@@ -213,181 +182,102 @@ fi
 log_info "Código fuente actualizado"
 
 #############################################
-# 8. INSTALAR DEPENDENCIAS
+# 7. CONFIGURAR VARIABLES DE ENTORNO
 #############################################
 
-log_step "8. Instalando dependencias de Node.js"
-cd $APP_DIR
-npm install
-log_info "Dependencias instaladas"
-
-#############################################
-# 9. VERIFICAR/CREAR ARCHIVO .ENV
-#############################################
-
-log_step "9. Verificando archivo .env"
+log_step "7. Configurando variables de entorno"
 
 if [ -f "$APP_DIR/.env" ]; then
-    log_info "Archivo .env existente encontrado - NO se modificará"
-    log_warn "Asegúrate de que tu .env tenga las credenciales correctas"
+    log_warn "Archivo .env existente encontrado - NO se modificará"
+    log_warn "Si necesitas actualizar las variables, edita manualmente el archivo"
 else
-    log_warn "No se encontró archivo .env"
-    log_info "Creando .env con valores por defecto..."
-    
-    cat > $APP_DIR/.env << 'ENVEOF'
-# Servidor
-NODE_ENV=development
-PORT=3001
+    log_info "Creando archivo .env desde .env.example..."
 
-# Base de datos MySQL
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=aura_messaging
-DB_USER=aura_user
-DB_PASSWORD=AuraMessaging2024!
+    if [ -f "$APP_DIR/.env.example" ]; then
+        cp $APP_DIR/.env.example $APP_DIR/.env
 
-# JWT
-JWT_SECRET=pezcadofrito.1
-JWT_EXPIRES_IN=24h
+        # Generar secretos aleatorios para JWT
+        JWT_SECRET=$(openssl rand -base64 32)
+        JWT_REFRESH_SECRET=$(openssl rand -base64 32)
 
-# WebSocket
-WS_CORS_ORIGIN=*
+        # Actualizar valores en .env
+        sed -i "s|JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|g" $APP_DIR/.env
+        sed -i "s|JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET|g" $APP_DIR/.env
+        sed -i "s|NODE_ENV=.*|NODE_ENV=production|g" $APP_DIR/.env
 
-# CORS
-CORS_ORIGIN=*
-
-# Logs
-LOG_LEVEL=debug
-ENVEOF
-    
-    log_info "Archivo .env creado con valores por defecto"
+        log_info "Archivo .env creado con secretos generados automáticamente"
+    else
+        log_error ".env.example no encontrado"
+        exit 1
+    fi
 fi
 
-# Mostrar contenido actual del .env (sin contraseñas)
-log_info "Configuración actual del .env:"
+# Mostrar configuración (sin secretos)
+log_info "Configuración actual:"
 grep -E "^(NODE_ENV|PORT|DB_HOST|DB_NAME|DB_USER)=" $APP_DIR/.env || true
 
 #############################################
-# 10. EJECUTAR MIGRACIONES
+# 8. DETENER CONTENEDORES ANTERIORES
 #############################################
 
-log_step "10. Ejecutando migraciones de base de datos"
+log_step "8. Deteniendo contenedores anteriores (si existen)"
 
 cd $APP_DIR
-export NODE_ENV=development
-
-if npm run db:migrate; then
-    log_info "✅ Migraciones ejecutadas correctamente"
-else
-    log_error "❌ Error en las migraciones"
-    log_warn "Verifica las credenciales en tu archivo .env"
-    exit 1
-fi
+docker-compose down 2>/dev/null || log_warn "No hay contenedores anteriores"
 
 #############################################
-# 11. CONFIGURAR NGINX
+# 9. CONSTRUIR Y LEVANTAR CONTENEDORES
 #############################################
 
-log_step "11. Configurando Nginx como reverse proxy"
+log_step "9. Construyendo y levantando contenedores"
 
-sudo tee /etc/nginx/sites-available/$APP_NAME > /dev/null << 'NGINXEOF'
-upstream aura_messaging {
-    server 127.0.0.1:3001;
-    keepalive 64;
-}
-
-server {
-    listen 80;
-    listen [::]:80;
-    server_name _;
-
-    access_log /var/log/nginx/aura-messaging_access.log;
-    error_log /var/log/nginx/aura-messaging_error.log;
-
-    client_max_body_size 10M;
-
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css application/json application/javascript;
-
-    location /api {
-        proxy_pass http://aura_messaging;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 90;
-    }
-
-    location /socket.io {
-        proxy_pass http://aura_messaging;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_read_timeout 86400;
-    }
-
-    location /health {
-        proxy_pass http://aura_messaging/api/v1/health;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-    }
-
-    location / {
-        return 301 /api/v1;
-    }
-}
-NGINXEOF
-
-sudo ln -sf /etc/nginx/sites-available/$APP_NAME /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl restart nginx
-log_info "Nginx configurado"
-
-#############################################
-# 12. CONFIGURAR PM2
-#############################################
-
-log_step "12. Configurando PM2"
-
-cat > $APP_DIR/ecosystem.config.js << PMEOF
-module.exports = {
-  apps: [{
-    name: 'aura-messaging-service',
-    script: 'src/index.js',
-    cwd: '$APP_DIR',
-    instances: 1,
-    autorestart: true,
-    watch: false,
-    max_memory_restart: '500M',
-    env: {
-      NODE_ENV: 'development',
-      PORT: 3001
-    }
-  }]
-};
-PMEOF
-
-sudo mkdir -p /var/log/pm2
-sudo chown -R $USER:$USER /var/log/pm2
-
-pm2 delete $APP_NAME 2>/dev/null || true
 cd $APP_DIR
-pm2 start ecosystem.config.js
-pm2 save
-sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp /home/$USER 2>/dev/null || true
-pm2 save
 
-log_info "PM2 configurado y aplicación iniciada"
+log_info "Construyendo imágenes Docker..."
+docker-compose build --no-cache
+
+log_info "Levantando servicios..."
+docker-compose up -d
+
+log_info "Esperando a que PostgreSQL esté listo..."
+sleep 10
+
+#############################################
+# 10. VERIFICAR ESTADO DE CONTENEDORES
+#############################################
+
+log_step "10. Verificando estado de contenedores"
+
+docker-compose ps
+
+#############################################
+# 11. EJECUTAR MIGRACIONES
+#############################################
+
+log_step "11. Ejecutando migraciones de base de datos"
+
+log_info "Esperando a que la aplicación esté lista..."
+sleep 5
+
+log_info "Ejecutando migraciones..."
+docker-compose exec -T app npm run db:migrate || {
+    log_error "Error al ejecutar migraciones"
+    log_warn "Intentando nuevamente en 10 segundos..."
+    sleep 10
+    docker-compose exec -T app npm run db:migrate
+}
+
+log_info "Migraciones ejecutadas correctamente"
+
+#############################################
+# 12. CONFIGURAR RESTART POLICIES
+#############################################
+
+log_step "12. Configurando políticas de reinicio"
+
+docker update --restart=unless-stopped aura-postgres aura-messaging-service
+
+log_info "Políticas de reinicio configuradas"
 
 #############################################
 # 13. VERIFICACIÓN FINAL
@@ -396,37 +286,61 @@ log_info "PM2 configurado y aplicación iniciada"
 log_step "13. Verificación final"
 
 echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}   ✅ DESPLIEGUE COMPLETADO${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "${BLUE}Información:${NC}"
-echo -e "  • Directorio: ${APP_DIR}"
-echo -e "  • Puerto: 3001"
-echo ""
-echo -e "${BLUE}URLs de acceso:${NC}"
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "TU_IP_PUBLICA")
-echo -e "  • API: http://${PUBLIC_IP}/api/v1"
-echo -e "  • Health: http://${PUBLIC_IP}/api/v1/health"
-echo -e "  • WebSocket: ws://${PUBLIC_IP}/socket.io"
-echo ""
-echo -e "${BLUE}Comandos útiles:${NC}"
-echo -e "  • Ver logs: ${YELLOW}pm2 logs${NC}"
-echo -e "  • Reiniciar: ${YELLOW}pm2 restart all${NC}"
-echo -e "  • Estado: ${YELLOW}pm2 status${NC}"
-echo ""
-echo -e "${BLUE}Base de datos:${NC}"
-echo -e "  • Usuario: aura_user"
-echo -e "  • Password: AuraMessaging2024!"
-echo -e "  • Database: aura_messaging"
-echo ""
+log_info "Probando conexión a PostgreSQL..."
+docker-compose exec -T postgres pg_isready -U postgres && log_info "✅ PostgreSQL: OK" || log_error "❌ PostgreSQL: FALLO"
 
-pm2 status
 echo ""
-
-sleep 3
 log_info "Probando API..."
-curl -s http://localhost:3001/api/v1/health 2>/dev/null || log_warn "API iniciando..."
+sleep 3
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/v1/health || echo "000")
+
+if [ "$HTTP_CODE" == "200" ]; then
+    log_info "✅ API: OK (HTTP $HTTP_CODE)"
+else
+    log_warn "⚠️  API: HTTP $HTTP_CODE (puede estar iniciando...)"
+fi
+
+#############################################
+# 14. RESUMEN FINAL
+#############################################
 
 echo ""
-echo -e "${GREEN}🚀 AURA Messaging Service está listo${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}   ✅ DESPLIEGUE COMPLETADO CON ÉXITO${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}📍 Información del despliegue:${NC}"
+echo -e "  • Directorio: ${APP_DIR}"
+echo -e "  • Puerto API: 3001"
+echo -e "  • Puerto WebSocket: 3002"
+echo -e "  • Base de datos: PostgreSQL 16"
+echo ""
+
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || hostname -I | awk '{print $1}')
+
+echo -e "${CYAN}🌐 URLs de acceso:${NC}"
+echo -e "  • API: ${GREEN}http://${PUBLIC_IP}:3001/api/v1${NC}"
+echo -e "  • Health: ${GREEN}http://${PUBLIC_IP}:3001/api/v1/health${NC}"
+echo -e "  • WebSocket: ${GREEN}ws://${PUBLIC_IP}:3002${NC}"
+echo ""
+echo -e "${CYAN}🐳 Comandos útiles Docker:${NC}"
+echo -e "  • Ver logs: ${YELLOW}docker-compose logs -f${NC}"
+echo -e "  • Ver logs app: ${YELLOW}docker-compose logs -f app${NC}"
+echo -e "  • Ver logs DB: ${YELLOW}docker-compose logs -f postgres${NC}"
+echo -e "  • Reiniciar: ${YELLOW}docker-compose restart${NC}"
+echo -e "  • Detener: ${YELLOW}docker-compose down${NC}"
+echo -e "  • Estado: ${YELLOW}docker-compose ps${NC}"
+echo -e "  • Shell app: ${YELLOW}docker-compose exec app sh${NC}"
+echo -e "  • Shell DB: ${YELLOW}docker-compose exec postgres psql -U postgres -d aura_messaging${NC}"
+echo ""
+echo -e "${CYAN}🗄️  PostgreSQL:${NC}"
+echo -e "  • Host: postgres (interno) / localhost (externo)"
+echo -e "  • Puerto: 5432"
+echo -e "  • Base de datos: aura_messaging"
+echo -e "  • Usuario: postgres"
+echo ""
+echo -e "${CYAN}📊 Monitoreo:${NC}"
+echo -e "  • Ver logs en tiempo real: ${YELLOW}cd $APP_DIR && docker-compose logs -f${NC}"
+echo ""
+echo -e "${GREEN}🚀 AURA Messaging Service está listo y funcionando!${NC}"
+echo ""
