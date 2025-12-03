@@ -1,1216 +1,1334 @@
-# 📱 AURA Messaging Service - Guía de Integración Frontend
+# 📚 API Documentation - AURA Messaging Service
 
-## Índice
+> **Documentación completa para el equipo de Frontend**
 
-1. [Información General](#información-general)
-2. [Autenticación](#autenticación)
-3. [Endpoints API REST](#endpoints-api-rest)
-4. [WebSocket - Tiempo Real](#websocket---tiempo-real)
-5. [Modelos de Datos](#modelos-de-datos)
-6. [Ejemplos de Integración Flutter](#ejemplos-de-integración-flutter)
-7. [Manejo de Errores](#manejo-de-errores)
-8. [Buenas Prácticas](#buenas-prácticas)
+## 🔗 URL Base
+
+```
+http://YOUR_EC2_PUBLIC_IP:3001/api/v1
+```
+
+**Ejemplo:**
+```
+http://54.242.230.190:3001/api/v1
+```
+
+## 📋 Tabla de Contenidos
+
+- [Autenticación](#-autenticación)
+- [Health Check](#-health-check)
+- [Usuarios](#-usuarios)
+- [Conversaciones](#-conversaciones)
+- [Mensajes](#-mensajes)
+- [Grupos](#-grupos)
+- [WebSocket](#-websocket)
+- [Códigos de Error](#-códigos-de-error)
 
 ---
 
-## Información General
+## 🔐 Autenticación
 
-### URLs Base
+La mayoría de los endpoints requieren autenticación mediante JWT.
 
-| Entorno | URL API | URL WebSocket |
-|---------|---------|---------------|
-| **Desarrollo** | `http://localhost:3001/api/v1` | `ws://localhost:3001` |
-| **Producción** | `https://api.tudominio.com/api/v1` | `wss://api.tudominio.com` |
+### Header de Autenticación
 
-### Headers Requeridos
 ```http
-Content-Type: application/json
-Authorization: Bearer <JWT_TOKEN>
+Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-### Formato de Respuesta
+### Generar JWT (desde tu servicio de perfiles)
 
-Todas las respuestas siguen este formato:
+El JWT debe incluir:
 ```json
 {
-  "success": true,
-  "message": "Descripción de la operación",
-  "data": { ... },
-  "total": 100,
-  "page": 1,
-  "limit": 20,
-  "totalPages": 5
-}
-```
-
----
-
-## Autenticación
-
-### Obtener Token JWT
-
-El token JWT se obtiene del **microservicio de autenticación principal** de AURA. Este token debe incluir:
-```json
-{
-  "id": "user-uuid",
-  "profileId": "profile-uuid",  // ⚠️ IMPORTANTE: Este es el ID que usa el servicio de mensajería
-  "username": "usuario",
-  "email": "usuario@email.com"
-}
-```
-
-### Sincronizar Usuario en Mensajería
-
-Cuando un usuario se registra o actualiza su perfil, sincronizar con el servicio de mensajería:
-```http
-POST /api/v1/users
-Content-Type: application/json
-
-{
-  "profileId": "uuid-del-perfil-completo",
+  "profileId": "uuid-del-usuario",
   "username": "nombre_usuario",
-  "displayName": "Nombre Visible",
-  "avatarUrl": "https://url-avatar.com/imagen.jpg"
+  "iat": 1234567890,
+  "exp": 1234567890
 }
 ```
 
-**Respuesta:**
+**Secret:** Debe coincidir con `JWT_SECRET` en el archivo `.env`
+
+---
+
+## 💚 Health Check
+
+### GET `/health`
+
+Verifica que el servicio está funcionando.
+
+**Sin autenticación**
+
+#### Request
+```bash
+curl http://54.242.230.190:3001/api/v1/health
+```
+
+#### Response
 ```json
 {
   "success": true,
-  "message": "Usuario creado",
+  "message": "AURA Messaging Service is running",
+  "timestamp": "2025-12-03T21:43:56.242Z"
+}
+```
+
+---
+
+## 👤 Usuarios
+
+### 1. Crear Usuario (Sincronización)
+
+**POST** `/users`
+
+Sincroniza un usuario del servicio de perfiles con el servicio de mensajería.
+
+**Sin autenticación** (úsalo después de crear el perfil)
+
+#### Request Body
+```json
+{
+  "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "username": "johndoe",
+  "displayName": "John Doe",
+  "avatarUrl": "https://example.com/avatar.jpg"
+}
+```
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `profileId` | UUID | ✅ | ID del perfil en el servicio de perfiles |
+| `username` | String | ✅ | Nombre de usuario (3-100 caracteres) |
+| `displayName` | String | ❌ | Nombre para mostrar (máx 150 caracteres) |
+| `avatarUrl` | String | ❌ | URL del avatar |
+
+#### Response
+```json
+{
+  "success": true,
   "data": {
-    "id": "uuid",
-    "profileId": "uuid",
-    "username": "nombre_usuario",
-    "displayName": "Nombre Visible",
-    "avatarUrl": "https://...",
-    "isOnline": false,
-    "isActive": true,
-    "createdAt": "2024-01-01T00:00:00.000Z"
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "username": "johndoe",
+    "displayName": "John Doe",
+    "avatarUrl": "https://example.com/avatar.jpg",
+    "status": "online",
+    "lastSeenAt": null,
+    "createdAt": "2025-12-03T21:43:56.242Z",
+    "updatedAt": "2025-12-03T21:43:56.242Z"
+  }
+}
+```
+
+### 2. Obtener Usuario por Profile ID
+
+**GET** `/users/profile/:profileId`
+
+🔒 Requiere autenticación
+
+#### Request
+```bash
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://54.242.230.190:3001/api/v1/users/profile/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "username": "johndoe",
+    "displayName": "John Doe",
+    "avatarUrl": "https://example.com/avatar.jpg",
+    "status": "online",
+    "lastSeenAt": "2025-12-03T21:43:56.242Z"
+  }
+}
+```
+
+### 3. Obtener Todos los Usuarios
+
+**GET** `/users`
+
+🔒 Requiere autenticación
+
+#### Query Parameters
+| Parámetro | Tipo | Default | Descripción |
+|-----------|------|---------|-------------|
+| `page` | Number | 1 | Número de página |
+| `limit` | Number | 20 | Resultados por página (máx 100) |
+
+#### Request
+```bash
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  "http://54.242.230.190:3001/api/v1/users?page=1&limit=20"
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "username": "johndoe",
+      "displayName": "John Doe",
+      "avatarUrl": "https://example.com/avatar.jpg",
+      "status": "online"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "pages": 8
   }
 }
 ```
 
 ---
 
-## Endpoints API REST
+## 💬 Conversaciones
 
-### 👤 USERS
+### 1. Crear Conversación
 
-#### Listar usuarios
-```http
-GET /api/v1/users?page=1&limit=20&search=nombre&isOnline=true
-Authorization: Bearer <token>
-```
+**POST** `/conversations`
 
-#### Obtener usuario por ID
-```http
-GET /api/v1/users/:id
-Authorization: Bearer <token>
-```
+Crea una conversación 1-a-1 entre dos usuarios.
 
-#### Obtener usuario por Profile ID
-```http
-GET /api/v1/users/profile/:profileId
-Authorization: Bearer <token>
-```
+🔒 Requiere autenticación
 
-#### Crear usuario (sincronización)
-```http
-POST /api/v1/users
-Content-Type: application/json
-
+#### Request Body
+```json
 {
-  "profileId": "uuid",
-  "username": "string",
-  "displayName": "string",
-  "avatarUrl": "string (URL)"
+  "participantProfileId": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 }
 ```
 
-#### Actualizar usuario
-```http
-PUT /api/v1/users/:id
-Authorization: Bearer <token>
-Content-Type: application/json
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `participantProfileId` | UUID | ✅ | Profile ID del otro participante |
 
+#### Response
+```json
 {
-  "username": "string",
-  "displayName": "string",
-  "avatarUrl": "string"
+  "success": true,
+  "data": {
+    "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+    "participant1ProfileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "participant2ProfileId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "lastMessageId": null,
+    "lastMessageAt": null,
+    "participant1Status": "active",
+    "participant2Status": "active",
+    "unreadCount1": 0,
+    "unreadCount2": 0,
+    "createdAt": "2025-12-03T21:43:56.242Z"
+  }
 }
 ```
 
----
+### 2. Obtener Mis Conversaciones
 
-### 💬 CONVERSATIONS (Chats Individuales)
+**GET** `/conversations`
 
-#### Listar mis conversaciones
-```http
-GET /api/v1/conversations?page=1&limit=20
-Authorization: Bearer <token>
+Obtiene todas las conversaciones del usuario autenticado.
+
+🔒 Requiere autenticación
+
+#### Query Parameters
+| Parámetro | Tipo | Default | Descripción |
+|-----------|------|---------|-------------|
+| `page` | Number | 1 | Número de página |
+| `limit` | Number | 20 | Resultados por página |
+| `status` | String | 'active' | Filtrar por estado: `active`, `archived`, `blocked` |
+
+#### Request
+```bash
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  "http://54.242.230.190:3001/api/v1/conversations?page=1&limit=20"
 ```
 
-**Respuesta:**
+#### Response
 ```json
 {
   "success": true,
   "data": [
     {
-      "id": "conversation-uuid",
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
       "otherParticipant": {
-        "id": "user-uuid",
-        "profileId": "profile-uuid",
-        "username": "otro_usuario",
-        "displayName": "Otro Usuario",
-        "avatarUrl": "https://...",
-        "isOnline": true
+        "profileId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "username": "janedoe",
+        "displayName": "Jane Doe",
+        "avatarUrl": "https://example.com/jane.jpg",
+        "status": "online"
       },
       "lastMessage": {
-        "id": "message-uuid",
-        "content": "Hola!",
+        "id": "d4e5f6a7-b8c9-0123-def0-123456789013",
+        "content": "¡Hola! ¿Cómo estás?",
         "messageType": "text",
-        "createdAt": "2024-01-01T12:00:00.000Z"
+        "senderProfileId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "createdAt": "2025-12-03T21:43:56.242Z"
       },
       "unreadCount": 3,
-      "lastMessageAt": "2024-01-01T12:00:00.000Z"
+      "status": "active",
+      "lastMessageAt": "2025-12-03T21:43:56.242Z",
+      "createdAt": "2025-12-01T10:30:00.000Z"
     }
   ],
-  "total": 10,
-  "page": 1,
-  "totalPages": 1
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 45,
+    "pages": 3
+  }
 }
 ```
 
-#### Obtener conversación específica
-```http
-GET /api/v1/conversations/:id
-Authorization: Bearer <token>
+### 3. Marcar Conversación como Leída
+
+**PATCH** `/conversations/:id/read`
+
+Marca todos los mensajes de una conversación como leídos.
+
+🔒 Requiere autenticación
+
+#### Request
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://54.242.230.190:3001/api/v1/conversations/c3d4e5f6-a7b8-9012-cdef-123456789012/read
 ```
 
-#### Crear/Obtener conversación con usuario
-```http
-POST /api/v1/conversations
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "participantProfileId": "uuid-del-otro-usuario"
-}
-```
-
-**Respuesta:**
+#### Response
 ```json
 {
   "success": true,
-  "message": "Conversación creada",
-  "data": { ... },
-  "isExisting": false  // true si ya existía
+  "message": "Conversación marcada como leída",
+  "data": {
+    "unreadCount": 0
+  }
 }
 ```
 
-#### Archivar conversación
-```http
-PATCH /api/v1/conversations/:id/archive
-Authorization: Bearer <token>
+### 4. Archivar Conversación
+
+**PATCH** `/conversations/:id/archive`
+
+Archiva una conversación.
+
+🔒 Requiere autenticación
+
+#### Request
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://54.242.230.190:3001/api/v1/conversations/c3d4e5f6-a7b8-9012-cdef-123456789012/archive
 ```
 
-#### Marcar como leída
-```http
-PATCH /api/v1/conversations/:id/read
-Authorization: Bearer <token>
+#### Response
+```json
+{
+  "success": true,
+  "message": "Conversación archivada",
+  "data": {
+    "status": "archived"
+  }
+}
 ```
 
 ---
 
-### 📨 MESSAGES
+## 📨 Mensajes
 
-#### Obtener mensajes de conversación
-```http
-GET /api/v1/messages/conversation/:conversationId?page=1&limit=50
-Authorization: Bearer <token>
+### 1. Enviar Mensaje
+
+**POST** `/messages`
+
+Envía un mensaje a una conversación o grupo.
+
+🔒 Requiere autenticación
+
+#### Request Body (Conversación)
+```json
+{
+  "conversationId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "content": "¡Hola! ¿Cómo estás?",
+  "messageType": "text"
+}
 ```
 
-**Respuesta:**
+#### Request Body (Grupo)
+```json
+{
+  "groupId": "e5f6a7b8-c9d0-1234-ef01-234567890123",
+  "content": "Hola a todos en el grupo!",
+  "messageType": "text"
+}
+```
+
+#### Request Body (Con Media)
+```json
+{
+  "conversationId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "content": "Mira esta foto!",
+  "messageType": "image",
+  "mediaUrl": "https://example.com/photo.jpg"
+}
+```
+
+#### Request Body (Responder a Mensaje)
+```json
+{
+  "conversationId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "content": "¡Totalmente de acuerdo!",
+  "messageType": "text",
+  "replyToId": "d4e5f6a7-b8c9-0123-def0-123456789013"
+}
+```
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `conversationId` | UUID | ⚠️ | ID de la conversación (requerido si no hay groupId) |
+| `groupId` | UUID | ⚠️ | ID del grupo (requerido si no hay conversationId) |
+| `content` | String | ✅ | Contenido del mensaje (máx 5000 caracteres) |
+| `messageType` | String | ❌ | Tipo: `text`, `image`, `video`, `audio`, `file`, `system` (default: `text`) |
+| `mediaUrl` | String | ❌ | URL del archivo multimedia |
+| `replyToId` | UUID | ❌ | ID del mensaje al que se responde |
+
+#### Response
+```json
+{
+  "success": true,
+  "data": {
+    "id": "f6a7b8c9-d0e1-2345-f012-345678901234",
+    "conversationId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+    "groupId": null,
+    "senderProfileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "content": "¡Hola! ¿Cómo estás?",
+    "messageType": "text",
+    "status": "sent",
+    "mediaUrl": null,
+    "replyToId": null,
+    "isEdited": false,
+    "isDeleted": false,
+    "metadata": {},
+    "createdAt": "2025-12-03T21:43:56.242Z",
+    "updatedAt": "2025-12-03T21:43:56.242Z"
+  }
+}
+```
+
+### 2. Obtener Mensajes de Conversación
+
+**GET** `/messages/conversation/:conversationId`
+
+Obtiene los mensajes de una conversación con paginación.
+
+🔒 Requiere autenticación
+
+#### Query Parameters
+| Parámetro | Tipo | Default | Descripción |
+|-----------|------|---------|-------------|
+| `page` | Number | 1 | Número de página |
+| `limit` | Number | 50 | Mensajes por página (máx 100) |
+| `order` | String | 'DESC' | Orden: `ASC` (antiguos primero), `DESC` (nuevos primero) |
+
+#### Request
+```bash
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  "http://54.242.230.190:3001/api/v1/messages/conversation/c3d4e5f6-a7b8-9012-cdef-123456789012?page=1&limit=50"
+```
+
+#### Response
 ```json
 {
   "success": true,
   "data": [
     {
-      "id": "message-uuid",
-      "conversationId": "conversation-uuid",
-      "senderProfileId": "profile-uuid",
-      "content": "Hola, ¿cómo estás?",
+      "id": "f6a7b8c9-d0e1-2345-f012-345678901234",
+      "conversationId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "senderProfileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "content": "¡Hola! ¿Cómo estás?",
       "messageType": "text",
       "status": "read",
       "mediaUrl": null,
       "replyToId": null,
       "isEdited": false,
       "isDeleted": false,
-      "createdAt": "2024-01-01T12:00:00.000Z",
       "sender": {
-        "id": "user-uuid",
-        "profileId": "profile-uuid",
-        "username": "usuario",
-        "displayName": "Usuario",
-        "avatarUrl": "https://..."
-      }
+        "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "username": "johndoe",
+        "displayName": "John Doe",
+        "avatarUrl": "https://example.com/avatar.jpg"
+      },
+      "replyTo": null,
+      "createdAt": "2025-12-03T21:43:56.242Z"
     }
   ],
-  "total": 100,
-  "page": 1,
-  "totalPages": 2
-}
-```
-
-#### Obtener mensajes de grupo
-```http
-GET /api/v1/messages/group/:groupId?page=1&limit=50
-Authorization: Bearer <token>
-```
-
-#### Enviar mensaje
-```http
-POST /api/v1/messages
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "conversationId": "uuid",     // Para chat individual
-  // O
-  "groupId": "uuid",            // Para grupo/comunidad
-  
-  "content": "Texto del mensaje",
-  "messageType": "text",        // text, image, video, audio, file
-  "mediaUrl": "https://...",    // Opcional, para multimedia
-  "replyToId": "uuid"           // Opcional, para responder a otro mensaje
-}
-```
-
-#### Editar mensaje
-```http
-PUT /api/v1/messages/:id
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "content": "Mensaje editado"
-}
-```
-
-#### Eliminar mensaje
-```http
-DELETE /api/v1/messages/:id
-Authorization: Bearer <token>
-```
-
----
-
-### 👥 GROUPS (Comunidades y Actividades)
-
-#### Listar todos los grupos públicos
-```http
-GET /api/v1/groups?page=1&limit=20&groupType=community&search=texto
-Authorization: Bearer <token> (opcional)
-```
-
-#### Mis comunidades
-```http
-GET /api/v1/groups/my/communities?page=1&limit=20
-Authorization: Bearer <token>
-```
-
-**Respuesta:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "group-uuid",
-      "name": "Apoyo Mutuo",
-      "groupType": "community",
-      "imageUrl": "https://...",
-      "memberCount": 150,
-      "lastMessageAt": "2024-01-01T12:00:00.000Z",
-      "myRole": "member",
-      "unreadCount": 5
-    }
-  ]
-}
-```
-
-#### Descubrir comunidades
-```http
-GET /api/v1/groups/discover?page=1&limit=20&search=meditacion
-Authorization: Bearer <token> (opcional)
-```
-
-#### Actividades cerca de ti
-```http
-GET /api/v1/groups/activities?page=1&limit=20&upcoming=true
-Authorization: Bearer <token> (opcional)
-```
-
-**Respuesta:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "group-uuid",
-      "name": "Caminata al Aire Libre",
-      "description": "Actividad grupal...",
-      "groupType": "activity",
-      "imageUrl": "https://...",
-      "memberCount": 15,
-      "maxMembers": 20,
-      "location": {
-        "lat": 16.7569,
-        "lng": -93.1292,
-        "address": "Parque Central, Tuxtla"
-      },
-      "scheduledAt": "2024-02-01T09:00:00.000Z"
-    }
-  ]
-}
-```
-
-#### Mis actividades
-```http
-GET /api/v1/groups/my/activities
-Authorization: Bearer <token>
-```
-
-#### Obtener grupo específico
-```http
-GET /api/v1/groups/:id
-Authorization: Bearer <token> (opcional)
-```
-
-**Respuesta incluye:**
-```json
-{
-  "data": {
-    "id": "...",
-    "name": "...",
-    "isMember": true,      // Si el usuario es miembro
-    "myRole": "member",    // owner, admin, moderator, member
-    "unreadCount": 5
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 234,
+    "pages": 5
   }
 }
 ```
 
-#### Crear grupo
-```http
-POST /api/v1/groups
-Authorization: Bearer <token>
-Content-Type: application/json
+### 3. Obtener Mensajes de Grupo
 
+**GET** `/messages/group/:groupId`
+
+Obtiene los mensajes de un grupo con paginación.
+
+🔒 Requiere autenticación
+
+#### Query Parameters
+Igual que mensajes de conversación.
+
+#### Request
+```bash
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  "http://54.242.230.190:3001/api/v1/messages/group/e5f6a7b8-c9d0-1234-ef01-234567890123?page=1&limit=50"
+```
+
+#### Response
+Similar a mensajes de conversación.
+
+### 4. Marcar Mensajes como Leídos
+
+**POST** `/messages/mark-as-read`
+
+Marca mensajes específicos como leídos.
+
+🔒 Requiere autenticación
+
+#### Request Body
+```json
 {
-  "name": "Nombre del Grupo",
-  "description": "Descripción...",
-  "imageUrl": "https://...",
-  "groupType": "community",      // community, activity, private
-  "maxMembers": 100,             // null = sin límite
+  "conversationId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "messageIds": [
+    "f6a7b8c9-d0e1-2345-f012-345678901234",
+    "a7b8c9d0-e1f2-3456-0123-456789012345"
+  ]
+}
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "message": "Mensajes marcados como leídos",
+  "data": {
+    "updated": 2
+  }
+}
+```
+
+### 5. Editar Mensaje
+
+**PUT** `/messages/:id`
+
+Edita un mensaje enviado.
+
+🔒 Requiere autenticación (solo el emisor puede editar)
+
+#### Request Body
+```json
+{
+  "content": "Mensaje editado con nuevo contenido"
+}
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "data": {
+    "id": "f6a7b8c9-d0e1-2345-f012-345678901234",
+    "content": "Mensaje editado con nuevo contenido",
+    "isEdited": true,
+    "updatedAt": "2025-12-03T22:00:00.000Z"
+  }
+}
+```
+
+### 6. Eliminar Mensaje
+
+**DELETE** `/messages/:id`
+
+Elimina un mensaje (soft delete).
+
+🔒 Requiere autenticación (solo el emisor puede eliminar)
+
+#### Request
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://54.242.230.190:3001/api/v1/messages/f6a7b8c9-d0e1-2345-f012-345678901234
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "message": "Mensaje eliminado",
+  "data": {
+    "id": "f6a7b8c9-d0e1-2345-f012-345678901234",
+    "isDeleted": true
+  }
+}
+```
+
+---
+
+## 👥 Grupos
+
+### 1. Crear Grupo
+
+**POST** `/groups`
+
+Crea un nuevo grupo o comunidad.
+
+🔒 Requiere autenticación
+
+#### Request Body
+```json
+{
+  "name": "Amantes del Café ☕",
+  "description": "Grupo para compartir experiencias sobre café",
+  "imageUrl": "https://example.com/cafe-group.jpg",
+  "groupType": "community",
   "isPublic": true,
-  "location": {                  // Solo para actividades
-    "lat": 16.7569,
-    "lng": -93.1292,
-    "address": "Dirección"
-  },
-  "scheduledAt": "2024-02-01T09:00:00.000Z"  // Solo para actividades
+  "maxMembers": 100
 }
 ```
 
-#### Actualizar grupo
-```http
-PUT /api/v1/groups/:id
-Authorization: Bearer <token>
-Content-Type: application/json
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `name` | String | ✅ | Nombre del grupo (2-200 caracteres) |
+| `description` | String | ❌ | Descripción (máx 2000 caracteres) |
+| `imageUrl` | String | ❌ | URL de la imagen del grupo |
+| `groupType` | String | ❌ | Tipo: `community`, `activity`, `private` (default: `community`) |
+| `isPublic` | Boolean | ❌ | Es público o privado (default: `true`) |
+| `maxMembers` | Number | ❌ | Límite de miembros (mín 2) |
+| `externalId` | UUID | ❌ | ID externo si se sincroniza desde otro servicio |
+| `scheduledAt` | ISO8601 | ❌ | Fecha programada para actividades |
+| `location` | Object | ❌ | Ubicación geográfica para actividades |
 
+#### Request Body (Actividad con Ubicación)
+```json
 {
-  "name": "Nuevo nombre",
-  "description": "Nueva descripción"
+  "name": "Caminata en el Parque Central",
+  "description": "Caminata grupal todos los sábados",
+  "groupType": "activity",
+  "isPublic": true,
+  "maxMembers": 20,
+  "scheduledAt": "2025-12-10T08:00:00.000Z",
+  "location": {
+    "lat": 40.785091,
+    "lng": -73.968285,
+    "address": "Central Park, New York, NY"
+  }
 }
 ```
 
-#### Eliminar grupo (solo owner)
-```http
-DELETE /api/v1/groups/:id
-Authorization: Bearer <token>
+#### Response
+```json
+{
+  "success": true,
+  "data": {
+    "id": "e5f6a7b8-c9d0-1234-ef01-234567890123",
+    "name": "Amantes del Café ☕",
+    "description": "Grupo para compartir experiencias sobre café",
+    "imageUrl": "https://example.com/cafe-group.jpg",
+    "groupType": "community",
+    "creatorProfileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "externalId": null,
+    "maxMembers": 100,
+    "isPublic": true,
+    "status": "active",
+    "memberCount": 1,
+    "lastMessageAt": null,
+    "location": null,
+    "scheduledAt": null,
+    "createdAt": "2025-12-03T21:43:56.242Z"
+  }
+}
 ```
 
-#### Unirse a grupo
-```http
-POST /api/v1/groups/:id/join
-Authorization: Bearer <token>
+### 2. Sincronizar Grupo (Sin Autenticación)
+
+**POST** `/groups/sync`
+
+Sincroniza un grupo creado desde otro servicio.
+
+**Sin autenticación** (para sincronización entre microservicios)
+
+#### Request Body
+```json
+{
+  "externalId": "g1h2i3j4-k5l6-7890-mnop-qr1234567890",
+  "name": "Grupo Sincronizado",
+  "description": "Grupo creado desde el servicio principal",
+  "creatorProfileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "groupType": "community",
+  "isPublic": true
+}
 ```
 
-#### Salir del grupo
-```http
-POST /api/v1/groups/:id/leave
-Authorization: Bearer <token>
+### 3. Obtener Todos los Grupos
+
+**GET** `/groups`
+
+Obtiene grupos públicos con filtros opcionales.
+
+Autenticación opcional (muestra más info si está autenticado)
+
+#### Query Parameters
+| Parámetro | Tipo | Default | Descripción |
+|-----------|------|---------|-------------|
+| `page` | Number | 1 | Número de página |
+| `limit` | Number | 20 | Grupos por página |
+| `groupType` | String | - | Filtrar por tipo: `community`, `activity`, `private` |
+| `isPublic` | Boolean | - | Filtrar por públicos/privados |
+| `search` | String | - | Buscar por nombre o descripción |
+
+#### Request
+```bash
+curl "http://54.242.230.190:3001/api/v1/groups?groupType=community&page=1&limit=20"
 ```
 
-#### Obtener miembros del grupo
-```http
-GET /api/v1/groups/:id/members?page=1&limit=50
-Authorization: Bearer <token> (opcional)
+#### Response
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "e5f6a7b8-c9d0-1234-ef01-234567890123",
+      "name": "Amantes del Café ☕",
+      "description": "Grupo para compartir experiencias sobre café",
+      "imageUrl": "https://example.com/cafe-group.jpg",
+      "groupType": "community",
+      "memberCount": 45,
+      "isPublic": true,
+      "status": "active",
+      "creator": {
+        "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "username": "johndoe",
+        "displayName": "John Doe"
+      },
+      "isMember": false,
+      "createdAt": "2025-12-01T10:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "pages": 8
+  }
+}
+```
+
+### 4. Descubrir Comunidades
+
+**GET** `/groups/discover`
+
+Obtiene comunidades públicas recomendadas.
+
+Autenticación opcional
+
+#### Request
+```bash
+curl "http://54.242.230.190:3001/api/v1/groups/discover?limit=10"
+```
+
+### 5. Obtener Actividades
+
+**GET** `/groups/activities`
+
+Obtiene actividades públicas (grupos de tipo activity).
+
+Autenticación opcional
+
+#### Query Parameters
+| Parámetro | Tipo | Descripción |
+|-----------|------|-------------|
+| `upcoming` | Boolean | Solo actividades futuras |
+| `lat` | Number | Latitud para filtrar por cercanía |
+| `lng` | Number | Longitud para filtrar por cercanía |
+| `radius` | Number | Radio en km (default: 10) |
+
+#### Request
+```bash
+curl "http://54.242.230.190:3001/api/v1/groups/activities?upcoming=true&lat=40.785091&lng=-73.968285&radius=5"
+```
+
+### 6. Mis Comunidades
+
+**GET** `/groups/my/communities`
+
+Obtiene las comunidades a las que pertenece el usuario.
+
+🔒 Requiere autenticación
+
+#### Request
+```bash
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://54.242.230.190:3001/api/v1/groups/my/communities
+```
+
+### 7. Mis Actividades
+
+**GET** `/groups/my/activities`
+
+Obtiene las actividades a las que pertenece el usuario.
+
+🔒 Requiere autenticación
+
+### 8. Unirse a Grupo
+
+**POST** `/groups/:id/join`
+
+Une al usuario autenticado a un grupo.
+
+🔒 Requiere autenticación
+
+#### Request
+```bash
+curl -X POST \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://54.242.230.190:3001/api/v1/groups/e5f6a7b8-c9d0-1234-ef01-234567890123/join
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "message": "Te has unido al grupo exitosamente",
+  "data": {
+    "groupId": "e5f6a7b8-c9d0-1234-ef01-234567890123",
+    "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "role": "member",
+    "joinedAt": "2025-12-03T21:43:56.242Z"
+  }
+}
+```
+
+### 9. Salir de Grupo
+
+**POST** `/groups/:id/leave`
+
+Saca al usuario autenticado de un grupo.
+
+🔒 Requiere autenticación
+
+#### Request
+```bash
+curl -X POST \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://54.242.230.190:3001/api/v1/groups/e5f6a7b8-c9d0-1234-ef01-234567890123/leave
+```
+
+### 10. Obtener Miembros del Grupo
+
+**GET** `/groups/:id/members`
+
+Obtiene la lista de miembros de un grupo.
+
+Autenticación opcional
+
+#### Query Parameters
+| Parámetro | Tipo | Default | Descripción |
+|-----------|------|---------|-------------|
+| `page` | Number | 1 | Número de página |
+| `limit` | Number | 50 | Miembros por página |
+| `role` | String | - | Filtrar por rol: `owner`, `admin`, `moderator`, `member` |
+
+#### Request
+```bash
+curl "http://54.242.230.190:3001/api/v1/groups/e5f6a7b8-c9d0-1234-ef01-234567890123/members?page=1&limit=50"
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "profileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "username": "johndoe",
+      "displayName": "John Doe",
+      "avatarUrl": "https://example.com/avatar.jpg",
+      "role": "owner",
+      "joinedAt": "2025-12-01T10:00:00.000Z"
+    },
+    {
+      "profileId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "username": "janedoe",
+      "displayName": "Jane Doe",
+      "avatarUrl": "https://example.com/jane.jpg",
+      "role": "member",
+      "joinedAt": "2025-12-02T14:30:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 45,
+    "pages": 1
+  }
+}
 ```
 
 ---
 
-### 👥 GROUP MEMBERS
-
-#### Listar miembros
-```http
-GET /api/v1/group-members?groupId=uuid&page=1&limit=50
-Authorization: Bearer <token>
-```
-
-#### Agregar miembro (admin)
-```http
-POST /api/v1/group-members
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "groupId": "uuid",
-  "profileId": "uuid",
-  "role": "member",        // member, moderator, admin
-  "nickname": "Apodo"      // Opcional
-}
-```
-
-#### Actualizar miembro
-```http
-PUT /api/v1/group-members/:id
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "role": "moderator",
-  "nickname": "Nuevo apodo"
-}
-```
-
-#### Promover miembro
-```http
-PATCH /api/v1/group-members/:id/promote
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "role": "moderator"   // moderator o admin
-}
-```
-
-#### Banear miembro
-```http
-PATCH /api/v1/group-members/:id/ban
-Authorization: Bearer <token>
-```
-
-#### Eliminar/Expulsar miembro
-```http
-DELETE /api/v1/group-members/:id
-Authorization: Bearer <token>
-```
-
----
-
-## WebSocket - Tiempo Real
+## 🔌 WebSocket
 
 ### Conexión
-```dart
-// Flutter - usando socket_io_client
-import 'package:socket_io_client/socket_io_client.dart' as IO;
 
-final socket = IO.io(
-  'https://api.tudominio.com',
-  IO.OptionBuilder()
-    .setTransports(['websocket'])
-    .setAuth({'token': 'JWT_TOKEN_AQUI'})
-    .build(),
-);
+```javascript
+const io = require('socket.io-client');
 
-socket.onConnect((_) {
-  print('Conectado al WebSocket');
-});
-
-socket.onDisconnect((_) {
-  print('Desconectado del WebSocket');
-});
-
-socket.onError((error) {
-  print('Error WebSocket: $error');
+const socket = io('http://54.242.230.190:3002', {
+  auth: {
+    token: 'YOUR_JWT_TOKEN'
+  }
 });
 ```
 
 ### Eventos del Cliente → Servidor
 
-#### Unirse a sala de conversación
-```dart
-socket.emit('join_conversation', conversationId);
+#### 1. Unirse a Conversación
+```javascript
+socket.emit('join_conversation', {
+  conversationId: 'c3d4e5f6-a7b8-9012-cdef-123456789012'
+});
 ```
 
-#### Salir de sala de conversación
-```dart
-socket.emit('leave_conversation', conversationId);
+#### 2. Salir de Conversación
+```javascript
+socket.emit('leave_conversation', {
+  conversationId: 'c3d4e5f6-a7b8-9012-cdef-123456789012'
+});
 ```
 
-#### Unirse a sala de grupo
-```dart
-socket.emit('join_group', groupId);
+#### 3. Unirse a Grupo
+```javascript
+socket.emit('join_group', {
+  groupId: 'e5f6a7b8-c9d0-1234-ef01-234567890123'
+});
 ```
 
-#### Salir de sala de grupo
-```dart
-socket.emit('leave_group', groupId);
+#### 4. Salir de Grupo
+```javascript
+socket.emit('leave_group', {
+  groupId: 'e5f6a7b8-c9d0-1234-ef01-234567890123'
+});
 ```
 
-#### Indicar que está escribiendo
-```dart
-// Para conversación
-socket.emit('typing_start', {'conversationId': conversationId});
-
-// Para grupo
-socket.emit('typing_start', {'groupId': groupId});
+#### 5. Usuario Escribiendo
+```javascript
+socket.emit('typing_start', {
+  conversationId: 'c3d4e5f6-a7b8-9012-cdef-123456789012'
+  // O groupId si es un grupo
+});
 ```
 
-#### Indicar que dejó de escribir
-```dart
-socket.emit('typing_stop', {'conversationId': conversationId});
-// o
-socket.emit('typing_stop', {'groupId': groupId});
+#### 6. Usuario Dejó de Escribir
+```javascript
+socket.emit('typing_stop', {
+  conversationId: 'c3d4e5f6-a7b8-9012-cdef-123456789012'
+});
 ```
 
 ### Eventos del Servidor → Cliente
 
-#### Nuevo mensaje
-```dart
-socket.on('new_message', (data) {
-  // data contiene el mensaje completo
-  print('Nuevo mensaje: ${data['content']}');
+#### 1. Nuevo Mensaje
+```javascript
+socket.on('new_message', (data) => {
+  console.log('Nuevo mensaje:', data);
+  // data = { message: {...}, conversationId: '...', groupId: '...' }
 });
 ```
 
-#### Mensaje actualizado
-```dart
-socket.on('message_updated', (data) {
-  // data contiene el mensaje actualizado
+#### 2. Mensaje Actualizado
+```javascript
+socket.on('message_updated', (data) => {
+  console.log('Mensaje editado:', data);
+  // data = { messageId: '...', content: '...', isEdited: true }
 });
 ```
 
-#### Mensaje eliminado
-```dart
-socket.on('message_deleted', (data) {
-  // data: { messageId: 'uuid' }
+#### 3. Mensaje Eliminado
+```javascript
+socket.on('message_deleted', (data) => {
+  console.log('Mensaje eliminado:', data);
+  // data = { messageId: '...', isDeleted: true }
 });
 ```
 
-#### Usuario escribiendo
-```dart
-socket.on('user_typing', (data) {
-  // data: { profileId: 'uuid', isTyping: true/false }
-  if (data['isTyping']) {
-    print('Usuario ${data['profileId']} está escribiendo...');
+#### 4. Usuario Escribiendo
+```javascript
+socket.on('user_typing', (data) => {
+  console.log('Usuario escribiendo:', data);
+  // data = { profileId: '...', username: '...', conversationId: '...' }
+});
+```
+
+#### 5. Mensajes Leídos
+```javascript
+socket.on('messages_read', (data) => {
+  console.log('Mensajes leídos:', data);
+  // data = { messageIds: ['...'], profileId: '...' }
+});
+```
+
+#### 6. Nuevo Miembro en Grupo
+```javascript
+socket.on('member_joined', (data) => {
+  console.log('Nuevo miembro:', data);
+  // data = { groupId: '...', member: {...} }
+});
+```
+
+#### 7. Miembro Salió del Grupo
+```javascript
+socket.on('member_left', (data) => {
+  console.log('Miembro salió:', data);
+  // data = { groupId: '...', profileId: '...' }
+});
+```
+
+### Ejemplo Completo de Cliente WebSocket
+
+```javascript
+import io from 'socket.io-client';
+
+class MessagingService {
+  constructor(token) {
+    this.socket = io('http://54.242.230.190:3002', {
+      auth: { token }
+    });
+
+    this.setupListeners();
   }
-});
-```
 
-#### Mensajes leídos
-```dart
-socket.on('messages_read', (data) {
-  // data: { profileId: 'uuid', messageIds: ['uuid1', 'uuid2'] }
-});
-```
+  setupListeners() {
+    this.socket.on('connect', () => {
+      console.log('✅ Conectado a WebSocket');
+    });
 
-#### Miembro se unió al grupo
-```dart
-socket.on('member_joined', (data) {
-  // data contiene info del nuevo miembro
-});
-```
+    this.socket.on('disconnect', () => {
+      console.log('❌ Desconectado de WebSocket');
+    });
 
-#### Miembro salió del grupo
-```dart
-socket.on('member_left', (data) {
-  // data: { profileId: 'uuid' }
-});
+    this.socket.on('new_message', this.onNewMessage.bind(this));
+    this.socket.on('user_typing', this.onUserTyping.bind(this));
+    this.socket.on('message_updated', this.onMessageUpdated.bind(this));
+    this.socket.on('message_deleted', this.onMessageDeleted.bind(this));
+  }
+
+  joinConversation(conversationId) {
+    this.socket.emit('join_conversation', { conversationId });
+  }
+
+  leaveConversation(conversationId) {
+    this.socket.emit('leave_conversation', { conversationId });
+  }
+
+  startTyping(conversationId) {
+    this.socket.emit('typing_start', { conversationId });
+  }
+
+  stopTyping(conversationId) {
+    this.socket.emit('typing_stop', { conversationId });
+  }
+
+  onNewMessage(data) {
+    // Actualizar UI con nuevo mensaje
+    console.log('Nuevo mensaje:', data.message);
+  }
+
+  onUserTyping(data) {
+    // Mostrar indicador de "escribiendo..."
+    console.log(`${data.username} está escribiendo...`);
+  }
+
+  onMessageUpdated(data) {
+    // Actualizar mensaje en la UI
+    console.log('Mensaje actualizado:', data);
+  }
+
+  onMessageDeleted(data) {
+    // Eliminar mensaje de la UI
+    console.log('Mensaje eliminado:', data.messageId);
+  }
+
+  disconnect() {
+    this.socket.disconnect();
+  }
+}
+
+// Uso
+const messaging = new MessagingService('YOUR_JWT_TOKEN');
+messaging.joinConversation('c3d4e5f6-a7b8-9012-cdef-123456789012');
 ```
 
 ---
 
-## Modelos de Datos
+## ❌ Códigos de Error
 
-### User
-```dart
-class User {
-  final String id;
-  final String profileId;
-  final String username;
-  final String? displayName;
-  final String? avatarUrl;
-  final bool isOnline;
-  final DateTime? lastSeenAt;
-  final bool isActive;
-  final DateTime createdAt;
-  
-  // Constructor y fromJson...
+### Códigos HTTP
+
+| Código | Significado |
+|--------|-------------|
+| 200 | OK - Solicitud exitosa |
+| 201 | Created - Recurso creado exitosamente |
+| 400 | Bad Request - Error en los datos enviados |
+| 401 | Unauthorized - Token inválido o faltante |
+| 403 | Forbidden - No tienes permisos |
+| 404 | Not Found - Recurso no encontrado |
+| 409 | Conflict - Conflicto (ej: conversación ya existe) |
+| 422 | Unprocessable Entity - Error de validación |
+| 500 | Internal Server Error - Error del servidor |
+
+### Formato de Error
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Error de validación en los datos enviados",
+    "details": [
+      {
+        "field": "content",
+        "message": "El contenido no puede estar vacío"
+      }
+    ]
+  }
 }
 ```
 
-### Message
-```dart
-class Message {
-  final String id;
-  final String? conversationId;
-  final String? groupId;
-  final String senderProfileId;
-  final String content;
-  final String messageType; // text, image, video, audio, file, system
-  final String status;      // sent, delivered, read, failed
-  final String? mediaUrl;
-  final String? replyToId;
-  final bool isEdited;
-  final bool isDeleted;
-  final DateTime createdAt;
-  final User? sender;
-  
-  // Constructor y fromJson...
+### Códigos de Error Comunes
+
+| Código | Descripción |
+|--------|-------------|
+| `VALIDATION_ERROR` | Error en la validación de datos |
+| `UNAUTHORIZED` | No autenticado o token inválido |
+| `FORBIDDEN` | Sin permisos para esta acción |
+| `NOT_FOUND` | Recurso no encontrado |
+| `CONVERSATION_EXISTS` | La conversación ya existe |
+| `GROUP_FULL` | El grupo alcanzó el límite de miembros |
+| `ALREADY_MEMBER` | Ya eres miembro de este grupo |
+| `NOT_MEMBER` | No eres miembro de este grupo |
+| `INTERNAL_ERROR` | Error interno del servidor |
+
+---
+
+## 📝 Tipos de Datos
+
+### User
+```typescript
+{
+  id: string;              // UUID
+  profileId: string;       // UUID
+  username: string;        // 3-100 caracteres
+  displayName: string;     // Máx 150 caracteres
+  avatarUrl: string;       // URL
+  status: 'online' | 'offline' | 'away';
+  lastSeenAt: string;      // ISO 8601
+  createdAt: string;       // ISO 8601
+  updatedAt: string;       // ISO 8601
 }
 ```
 
 ### Conversation
-```dart
-class Conversation {
-  final String id;
-  final User otherParticipant;
-  final Message? lastMessage;
-  final int unreadCount;
-  final DateTime? lastMessageAt;
-  final DateTime createdAt;
-  
-  // Constructor y fromJson...
+```typescript
+{
+  id: string;                    // UUID
+  participant1ProfileId: string; // UUID
+  participant2ProfileId: string; // UUID
+  lastMessageId: string | null;  // UUID
+  lastMessageAt: string | null;  // ISO 8601
+  participant1Status: 'active' | 'archived' | 'blocked';
+  participant2Status: 'active' | 'archived' | 'blocked';
+  unreadCount1: number;
+  unreadCount2: number;
+  createdAt: string;             // ISO 8601
+  updatedAt: string;             // ISO 8601
+}
+```
+
+### Message
+```typescript
+{
+  id: string;                    // UUID
+  conversationId: string | null; // UUID
+  groupId: string | null;        // UUID
+  senderProfileId: string;       // UUID
+  content: string;               // Máx 5000 caracteres
+  messageType: 'text' | 'image' | 'video' | 'audio' | 'file' | 'system';
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  mediaUrl: string | null;       // URL
+  replyToId: string | null;      // UUID
+  isEdited: boolean;
+  isDeleted: boolean;
+  metadata: object;              // JSON
+  createdAt: string;             // ISO 8601
+  updatedAt: string;             // ISO 8601
 }
 ```
 
 ### Group
-```dart
-class Group {
-  final String id;
-  final String name;
-  final String? description;
-  final String? imageUrl;
-  final String groupType; // community, activity, private
-  final String creatorProfileId;
-  final int? maxMembers;
-  final bool isPublic;
-  final int memberCount;
-  final DateTime? lastMessageAt;
-  final Map<String, dynamic>? location;
-  final DateTime? scheduledAt;
-  final bool? isMember;
-  final String? myRole;
-  final int? unreadCount;
-  
-  // Constructor y fromJson...
+```typescript
+{
+  id: string;                    // UUID
+  name: string;                  // 2-200 caracteres
+  description: string;           // Máx 2000 caracteres
+  imageUrl: string | null;       // URL
+  groupType: 'community' | 'activity' | 'private';
+  creatorProfileId: string;      // UUID
+  externalId: string | null;     // UUID
+  maxMembers: number | null;     // Mín 2
+  isPublic: boolean;
+  status: 'active' | 'inactive' | 'archived';
+  settings: object;              // JSON
+  memberCount: number;
+  lastMessageAt: string | null;  // ISO 8601
+  location: {
+    lat: number;
+    lng: number;
+    address: string;
+  } | null;
+  scheduledAt: string | null;    // ISO 8601
+  createdAt: string;             // ISO 8601
+  updatedAt: string;             // ISO 8601
 }
 ```
 
 ### GroupMember
-```dart
-class GroupMember {
-  final String id;
-  final String groupId;
-  final String profileId;
-  final String role;   // owner, admin, moderator, member
-  final String status; // active, muted, banned, left, pending
-  final String? nickname;
-  final int unreadCount;
-  final DateTime joinedAt;
-  final User? user;
-  
-  // Constructor y fromJson...
+```typescript
+{
+  groupId: string;               // UUID
+  profileId: string;             // UUID
+  role: 'owner' | 'admin' | 'moderator' | 'member';
+  joinedAt: string;              // ISO 8601
+  isBanned: boolean;
 }
 ```
 
 ---
 
-## Ejemplos de Integración Flutter
+## 🚀 Guía Rápida de Integración
 
-### Service de API Base
-```dart
-// lib/core/services/api_service.dart
+### 1. Sincronizar Usuario al Registrarse
 
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-
-class ApiService {
-  static const String baseUrl = 'https://api.tudominio.com/api/v1';
-  String? _token;
-
-  void setToken(String token) {
-    _token = token;
-  }
-
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    if (_token != null) 'Authorization': 'Bearer $_token',
-  };
-
-  Future<Map<String, dynamic>> get(String endpoint) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: _headers,
-    );
-    return _handleResponse(response);
-  }
-
-  Future<Map<String, dynamic>> post(String endpoint, Map<String, dynamic> body) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: _headers,
-      body: jsonEncode(body),
-    );
-    return _handleResponse(response);
-  }
-
-  Future<Map<String, dynamic>> put(String endpoint, Map<String, dynamic> body) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: _headers,
-      body: jsonEncode(body),
-    );
-    return _handleResponse(response);
-  }
-
-  Future<Map<String, dynamic>> delete(String endpoint) async {
-    final response = await http.delete(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: _headers,
-    );
-    return _handleResponse(response);
-  }
-
-  Map<String, dynamic> _handleResponse(http.Response response) {
-    final data = jsonDecode(response.body);
-    
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return data;
-    }
-    
-    throw ApiException(
-      statusCode: response.statusCode,
-      message: data['message'] ?? 'Error desconocido',
-      code: data['code'],
-    );
-  }
-}
-
-class ApiException implements Exception {
-  final int statusCode;
-  final String message;
-  final String? code;
-
-  ApiException({required this.statusCode, required this.message, this.code});
-
-  @override
-  String toString() => 'ApiException: $message (code: $code, status: $statusCode)';
-}
-```
-
-### Repository de Mensajes
-```dart
-// lib/features/messaging/data/repositories/message_repository.dart
-
-import '../models/message_model.dart';
-import '../../core/services/api_service.dart';
-
-class MessageRepository {
-  final ApiService _api;
-
-  MessageRepository(this._api);
-
-  Future<List<Message>> getConversationMessages(
-    String conversationId, {
-    int page = 1,
-    int limit = 50,
-  }) async {
-    final response = await _api.get(
-      '/messages/conversation/$conversationId?page=$page&limit=$limit',
-    );
-    
-    final List<dynamic> data = response['data'];
-    return data.map((json) => Message.fromJson(json)).toList();
-  }
-
-  Future<List<Message>> getGroupMessages(
-    String groupId, {
-    int page = 1,
-    int limit = 50,
-  }) async {
-    final response = await _api.get(
-      '/messages/group/$groupId?page=$page&limit=$limit',
-    );
-    
-    final List<dynamic> data = response['data'];
-    return data.map((json) => Message.fromJson(json)).toList();
-  }
-
-  Future<Message> sendMessage({
-    String? conversationId,
-    String? groupId,
-    required String content,
-    String messageType = 'text',
-    String? mediaUrl,
-    String? replyToId,
-  }) async {
-    final body = <String, dynamic>{
-      'content': content,
-      'messageType': messageType,
-    };
-
-    if (conversationId != null) body['conversationId'] = conversationId;
-    if (groupId != null) body['groupId'] = groupId;
-    if (mediaUrl != null) body['mediaUrl'] = mediaUrl;
-    if (replyToId != null) body['replyToId'] = replyToId;
-
-    final response = await _api.post('/messages', body);
-    return Message.fromJson(response['data']);
-  }
-
-  Future<Message> editMessage(String messageId, String content) async {
-    final response = await _api.put('/messages/$messageId', {
-      'content': content,
-    });
-    return Message.fromJson(response['data']);
-  }
-
-  Future<void> deleteMessage(String messageId) async {
-    await _api.delete('/messages/$messageId');
-  }
-}
-```
-
-### Provider de Chat
-```dart
-// lib/features/messaging/presentation/providers/chat_provider.dart
-
-import 'package:flutter/foundation.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
-import '../../data/repositories/message_repository.dart';
-import '../../data/models/message_model.dart';
-
-class ChatProvider extends ChangeNotifier {
-  final MessageRepository _repository;
-  IO.Socket? _socket;
-  
-  List<Message> _messages = [];
-  bool _isLoading = false;
-  String? _error;
-  bool _isTyping = false;
-  String? _typingUser;
-
-  List<Message> get messages => _messages;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  bool get isTyping => _isTyping;
-  String? get typingUser => _typingUser;
-
-  ChatProvider(this._repository);
-
-  void initSocket(String token, String baseUrl) {
-    _socket = IO.io(
-      baseUrl,
-      IO.OptionBuilder()
-        .setTransports(['websocket'])
-        .setAuth({'token': token})
-        .build(),
-    );
-
-    _socket!.onConnect((_) {
-      debugPrint('WebSocket conectado');
-    });
-
-    _socket!.on('new_message', (data) {
-      final message = Message.fromJson(data);
-      _messages.insert(0, message);
-      notifyListeners();
-    });
-
-    _socket!.on('message_updated', (data) {
-      final updatedMessage = Message.fromJson(data);
-      final index = _messages.indexWhere((m) => m.id == updatedMessage.id);
-      if (index != -1) {
-        _messages[index] = updatedMessage;
-        notifyListeners();
-      }
-    });
-
-    _socket!.on('message_deleted', (data) {
-      _messages.removeWhere((m) => m.id == data['messageId']);
-      notifyListeners();
-    });
-
-    _socket!.on('user_typing', (data) {
-      _isTyping = data['isTyping'];
-      _typingUser = data['profileId'];
-      notifyListeners();
-    });
-  }
-
-  void joinConversation(String conversationId) {
-    _socket?.emit('join_conversation', conversationId);
-  }
-
-  void leaveConversation(String conversationId) {
-    _socket?.emit('leave_conversation', conversationId);
-  }
-
-  void joinGroup(String groupId) {
-    _socket?.emit('join_group', groupId);
-  }
-
-  void leaveGroup(String groupId) {
-    _socket?.emit('leave_group', groupId);
-  }
-
-  void startTyping({String? conversationId, String? groupId}) {
-    _socket?.emit('typing_start', {
-      if (conversationId != null) 'conversationId': conversationId,
-      if (groupId != null) 'groupId': groupId,
-    });
-  }
-
-  void stopTyping({String? conversationId, String? groupId}) {
-    _socket?.emit('typing_stop', {
-      if (conversationId != null) 'conversationId': conversationId,
-      if (groupId != null) 'groupId': groupId,
-    });
-  }
-
-  Future<void> loadConversationMessages(String conversationId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      _messages = await _repository.getConversationMessages(conversationId);
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> loadGroupMessages(String groupId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      _messages = await _repository.getGroupMessages(groupId);
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> sendMessage({
-    String? conversationId,
-    String? groupId,
-    required String content,
-    String? mediaUrl,
-    String? replyToId,
-  }) async {
-    try {
-      await _repository.sendMessage(
-        conversationId: conversationId,
-        groupId: groupId,
-        content: content,
-        mediaUrl: mediaUrl,
-        replyToId: replyToId,
-      );
-      // El mensaje llegará por WebSocket
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  }
-
-  void dispose() {
-    _socket?.dispose();
-    super.dispose();
-  }
-}
-```
-
----
-
-## Manejo de Errores
-
-### Códigos de Error Comunes
-
-| Código HTTP | Código Error | Descripción |
-|-------------|--------------|-------------|
-| 400 | `VALIDATION_ERROR` | Error de validación de datos |
-| 400 | `INVALID_TARGET` | Debe especificar conversationId o groupId |
-| 400 | `ALREADY_MEMBER` | Ya eres miembro del grupo |
-| 400 | `GROUP_FULL` | El grupo está lleno |
-| 401 | `NO_TOKEN` | Token no proporcionado |
-| 401 | `TOKEN_EXPIRED` | Token expirado |
-| 401 | `INVALID_TOKEN` | Token inválido |
-| 403 | `ACCESS_DENIED` | Sin acceso a este recurso |
-| 403 | `NOT_A_MEMBER` | No eres miembro del grupo |
-| 403 | `NOT_AUTHORIZED` | Sin permisos para esta acción |
-| 403 | `NOT_OWNER` | Solo el owner puede hacer esto |
-| 403 | `PRIVATE_GROUP` | El grupo es privado |
-| 404 | `USER_NOT_FOUND` | Usuario no encontrado |
-| 404 | `MESSAGE_NOT_FOUND` | Mensaje no encontrado |
-| 404 | `CONVERSATION_NOT_FOUND` | Conversación no encontrada |
-| 404 | `GROUP_NOT_FOUND` | Grupo no encontrado |
-| 409 | `USER_EXISTS` | El usuario ya existe |
-| 409 | `DUPLICATE_ENTRY` | Registro duplicado |
-| 500 | `INTERNAL_ERROR` | Error interno del servidor |
-
-### Ejemplo de Manejo en Flutter
-```dart
-try {
-  final response = await api.post('/messages', body);
-  // Éxito
-} on ApiException catch (e) {
-  switch (e.code) {
-    case 'TOKEN_EXPIRED':
-      // Redirigir a login
-      break;
-    case 'NOT_A_MEMBER':
-      // Mostrar mensaje de que no es miembro
-      break;
-    case 'GROUP_FULL':
-      // Mostrar que el grupo está lleno
-      break;
-    default:
-      // Mostrar error genérico
-      showError(e.message);
-  }
-}
-```
-
----
-
-## Buenas Prácticas
-
-### 1. Paginación
-Siempre usar paginación para listas:
-```dart
-// Cargar más mensajes al hacer scroll
-Future<void> loadMoreMessages() async {
-  if (_isLoadingMore || _hasReachedEnd) return;
-  
-  _currentPage++;
-  final newMessages = await repository.getMessages(page: _currentPage);
-  
-  if (newMessages.isEmpty) {
-    _hasReachedEnd = true;
-  } else {
-    _messages.addAll(newMessages);
-  }
-}
-```
-
-### 2. WebSocket - Reconexión
-Implementar lógica de reconexión:
-```dart
-socket.onDisconnect((_) {
-  Future.delayed(Duration(seconds: 3), () {
-    if (!socket.connected) {
-      socket.connect();
-    }
-  });
+```javascript
+// Después de crear el usuario en el servicio de perfiles
+await fetch('http://54.242.230.190:3001/api/v1/users', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    profileId: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl
+  })
 });
 ```
 
-### 3. Optimistic Updates
-Para mejor UX, mostrar mensaje antes de confirmación:
-```dart
-Future<void> sendMessage(String content) async {
-  // Crear mensaje temporal
-  final tempMessage = Message(
-    id: 'temp-${DateTime.now().millisecondsSinceEpoch}',
-    content: content,
-    status: 'sending',
-    // ...
-  );
-  
-  // Agregar a la lista inmediatamente
-  _messages.insert(0, tempMessage);
-  notifyListeners();
-  
-  try {
-    final realMessage = await repository.sendMessage(content: content);
-    // Reemplazar temporal con real
-    final index = _messages.indexWhere((m) => m.id == tempMessage.id);
-    _messages[index] = realMessage;
-  } catch (e) {
-    // Marcar como fallido
-    tempMessage.status = 'failed';
-  }
-  notifyListeners();
-}
+### 2. Iniciar Conversación
+
+```javascript
+const token = 'JWT_TOKEN_FROM_PROFILE_SERVICE';
+
+// Crear conversación
+const response = await fetch('http://54.242.230.190:3001/api/v1/conversations', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    participantProfileId: 'OTHER_USER_PROFILE_ID'
+  })
+});
+
+const { data: conversation } = await response.json();
 ```
 
-### 4. Caché Local
-Guardar mensajes localmente para acceso offline:
-```dart
-// Usar Hive o SQLite para caché local
-await localDb.saveMessages(conversationId, messages);
+### 3. Enviar Mensaje
 
-// Cargar primero de caché, luego actualizar
-_messages = await localDb.getMessages(conversationId);
-notifyListeners();
-
-// Actualizar desde servidor
-final serverMessages = await repository.getMessages(conversationId);
-_messages = serverMessages;
-await localDb.saveMessages(conversationId, serverMessages);
-notifyListeners();
+```javascript
+// Enviar mensaje
+await fetch('http://54.242.230.190:3001/api/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    conversationId: conversation.id,
+    content: 'Hola! ¿Cómo estás?',
+    messageType: 'text'
+  })
+});
 ```
 
-### 5. Debounce para Typing
-Evitar muchas emisiones de "typing":
-```dart
-Timer? _typingTimer;
+### 4. Conectar WebSocket y Recibir Mensajes en Tiempo Real
 
-void onTextChanged(String text) {
-  if (_typingTimer?.isActive ?? false) {
-    _typingTimer!.cancel();
-  } else {
-    socket.emit('typing_start', {...});
-  }
-  
-  _typingTimer = Timer(Duration(seconds: 2), () {
-    socket.emit('typing_stop', {...});
-  });
-}
+```javascript
+import io from 'socket.io-client';
+
+const socket = io('http://54.242.230.190:3002', {
+  auth: { token }
+});
+
+// Unirse a la conversación
+socket.emit('join_conversation', {
+  conversationId: conversation.id
+});
+
+// Escuchar nuevos mensajes
+socket.on('new_message', (data) => {
+  console.log('Nuevo mensaje:', data.message);
+  // Actualizar UI
+});
 ```
 
 ---
 
-## Contacto y Soporte
+## 🔧 Variables de Entorno Necesarias
 
-- **API Health Check:** `GET /api/v1/health`
-- **Documentación API:** `GET /api/v1`
+Para integrar este servicio, asegúrate de configurar:
 
-Para reportar problemas o solicitar nuevas funcionalidades, contactar al equipo de backend.
+```env
+# En tu frontend
+VITE_MESSAGING_API_URL=http://54.242.230.190:3001/api/v1
+VITE_MESSAGING_WS_URL=http://54.242.230.190:3002
+
+# El JWT_SECRET debe coincidir entre servicios
+JWT_SECRET=tu_secret_compartido
+```
 
 ---
 
-**Versión:** 1.0.0  
-**Última actualización:** Noviembre 2024  
-**Autor:** Innovación W.E.L.
+## 📞 Soporte
+
+Si encuentras algún problema o necesitas ayuda:
+
+- 📧 Email: soporte@aura.com
+- 🐛 Issues: [GitHub Issues](https://github.com/wilber023/aura-messasing-service/issues)
+- 📖 Documentación completa: Ver [README_PROYECTO.md](README_PROYECTO.md)
+
+---
+
+**Última actualización:** Diciembre 2025
+**Versión:** 2.0.0 (PostgreSQL)
